@@ -10,6 +10,7 @@ import {
   getRecipient,
   upsertMerit,
 } from "../api";
+import { absoluteUrl } from "../api/client";
 import type { MeritContent, RecipientDetail } from "../types";
 import Field, { Button, Input, TextArea } from "../components/Field";
 
@@ -47,7 +48,7 @@ export default function MeritContentEditPage() {
   const onGeneratePdf = async () => {
     await upsertMerit(recipientId, mc);
     const res = await generatePdf(recipientId);
-    if (res.files[0]) window.open(res.files[0].download_url, "_blank");
+    if (res.files[0]) window.open(absoluteUrl(res.files[0].download_url), "_blank");
   };
 
   return (

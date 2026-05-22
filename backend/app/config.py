@@ -3,7 +3,9 @@ import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-STORAGE_DIR = BASE_DIR / "storage"
+
+# STORAGE_DIR을 환경변수로 오버라이드 가능 (Fly.io 볼륨 마운트 등)
+STORAGE_DIR = Path(os.getenv("STORAGE_DIR", str(BASE_DIR / "storage")))
 GENERATED_DIR = STORAGE_DIR / "generated"
 UPLOAD_DIR = STORAGE_DIR / "uploads"
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -11,28 +13,34 @@ TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 for d in (STORAGE_DIR, GENERATED_DIR, UPLOAD_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR}/storage/app.db")
+# DB URL - SQLite(로컬) 또는 Postgres(운영)
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{STORAGE_DIR}/app.db")
+# Heroku/Supabase legacy 형식 보정
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+elif DATABASE_URL.startswith("postgresql://") and "+psycopg" not in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
 
 # LLM (선택) - 환경변수가 있을 때만 호출
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
-# PDF 엔진 선택: "playwright" 또는 "weasyprint"
-PDF_ENGINE = os.getenv("PDF_ENGINE", "weasyprint")
+# PDF 엔진 선택: "playwright" 또는 "weasyprint" (운영기본=playwright)
+PDF_ENGINE = os.getenv("PDF_ENGINE", "playwright")
 
 # 조사자 기본값 (검정색 = 상수, 변경 가능)
 DEFAULT_INVESTIGATOR = {
-    "department": "경기도의회 보건복지전문위원실",
-    "position": "수석전문위원",
-    "rank": "지방서기관",
-    "name": "이호준",
+    "department": os.getenv("INV_DEPARTMENT", "경기도의회 보건복지전문위원실"),
+    "position": os.getenv("INV_POSITION", "수석전문위원"),
+    "rank": os.getenv("INV_RANK", "지방서기관"),
+    "name": os.getenv("INV_NAME", "이호준"),
 }
 
-# 추천관 기본값
-DEFAULT_RECOMMENDER_AGENCY = "경기도의회"
+DEFAULT_RECOMMENDER_AGENCY = os.getenv("RECOMMENDER_AGENCY", "경기도의회")
 
-# CORS
-ALLOWED_ORIGINS = os.getenv(
+# CORS - 콤마 구분, "*" 면 모두 허용
+_origins_raw = os.getenv(
     "ALLOWED_ORIGINS",
     "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173",
-).split(",")
+)
+ALLOWED_ORIGINS = [o.strip() for o in _origins_raw.split(",") if o.strip()]

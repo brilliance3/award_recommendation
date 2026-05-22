@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { generateAll, generateXlsx, generateZip, getCase } from "../api";
+import { absoluteUrl } from "../api/client";
 import type { AwardCaseDetail, GeneratedFileInfo } from "../types";
 import { Button } from "../components/Field";
 
@@ -52,7 +53,7 @@ export default function DownloadPage() {
               {files.map(f => (
                 <li key={f.file_name} className="flex justify-between border-b py-2">
                   <span>{f.file_name}</span>
-                  <a className="text-blue-600 hover:underline" href={f.download_url} target="_blank" rel="noreferrer">다운로드</a>
+                  <a className="text-blue-600 hover:underline" href={absoluteUrl(f.download_url)} target="_blank" rel="noreferrer">다운로드</a>
                 </li>
               ))}
             </ul>
@@ -64,7 +65,7 @@ export default function DownloadPage() {
             <h2 className="font-bold mb-2">ZIP 패키지</h2>
             <div className="flex justify-between text-sm border rounded px-3 py-2 bg-slate-50">
               <span>{zipFile.file_name}</span>
-              <a className="text-blue-600 hover:underline" href={zipFile.download_url} target="_blank" rel="noreferrer">다운로드</a>
+              <a className="text-blue-600 hover:underline" href={absoluteUrl(zipFile.download_url)} target="_blank" rel="noreferrer">다운로드</a>
             </div>
           </div>
         )}

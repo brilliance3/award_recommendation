@@ -7,8 +7,14 @@ jinja2>=3.1
 openpyxl>=3.1
 httpx>=0.27
 beautifulsoup4>=4.12
-# PDF 엔진 (둘 중 하나 설치하면 됨. 기본은 weasyprint)
-weasyprint>=60
-# Playwright 사용 시:
-#   pip install playwright
-#   playwright install chromium
+
+# DB 드라이버 (운영용 Postgres)
+psycopg2-binary>=2.9
+
+# PDF 엔진 (배포 환경은 Playwright 기본)
+# Playwright는 mcr.microsoft.com/playwright/python 베이스 이미지에 이미 들어있음.
+# 로컬에서 별도로 쓸 경우만 명시:
+playwright>=1.47
+
+# 로컬에서 WeasyPrint를 쓰고 싶다면 주석 해제 (시스템 라이브러리 필요)
+# weasyprint>=60

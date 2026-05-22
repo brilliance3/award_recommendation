@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { generatePdf, getRecipient } from "../api";
+import { absoluteUrl } from "../api/client";
 import { Button } from "../components/Field";
 
 export default function DocumentPreviewPage() {
@@ -17,7 +18,10 @@ export default function DocumentPreviewPage() {
     setGenerating(true);
     try {
       const res = await generatePdf(recipientId);
-      if (res.files[0]) window.open(res.files[0].download_url, "_blank");
+      if (res.files[0]) window.open(absoluteUrl(res.files[0].download_url), "_blank");
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || "알 수 없는 오류";
+      alert(`PDF 생성 실패\n${detail}`);
     } finally {
       setGenerating(false);
     }
@@ -35,7 +39,7 @@ export default function DocumentPreviewPage() {
       <div className="bg-white shadow rounded overflow-hidden" style={{ height: "80vh" }}>
         <iframe
           title="공적조서 미리보기"
-          src={`/api/recipients/${recipientId}/preview`}
+          src={absoluteUrl(`/api/recipients/${recipientId}/preview`)}
           className="w-full h-full"
         />
       </div>
