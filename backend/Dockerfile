@@ -8,7 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# pip install 한 뒤 해당 playwright 버전에 맞는 chromium 을 다시 받아 버전 미스매치 방지
+RUN pip install --no-cache-dir -r requirements.txt && \
+    playwright install chromium
 
 COPY app ./app
 RUN mkdir -p /app/storage/generated /app/storage/uploads

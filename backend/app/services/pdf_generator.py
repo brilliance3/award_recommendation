@@ -208,7 +208,9 @@ def _render_with_playwright(html: str, file_path: Path) -> None:
         ) from e
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch()
+            browser = p.chromium.launch(
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+            )
             page = browser.new_page()
             page.set_content(html, wait_until="load")
             page.pdf(
@@ -220,11 +222,13 @@ def _render_with_playwright(html: str, file_path: Path) -> None:
             browser.close()
     except Exception as e:
         msg = str(e).lower()
-        if "executable doesn't exist" in msg or "chromium" in msg:
+        # Chromium 바이너리 자체가 없을 때만 PDFEngineUnavailable로 폴백
+        if "executable doesn't exist" in msg or "no such file" in msg:
             raise PDFEngineUnavailable(
-                f"playwright chromium 미설치: `playwright install chromium`"
+                f"playwright chromium 바이너리 없음: {e}"
             ) from e
-        raise
+        # 그 외 (메모리 부족, 권한, 폰트 등)는 원본 에러를 그대로 전파해 진단 가능하게
+        raise RuntimeError(f"playwright 렌더링 실패: {e}") from e
 
 
 def render_html_for_preview(case: AwardCase, recipient: Recipient) -> str:
