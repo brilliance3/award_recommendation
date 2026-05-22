@@ -2,9 +2,118 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root { height: 100%; }
-body {
-  font-family: "Malgun Gothic", "맑은 고딕", -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", sans-serif;
-  background: #f8fafc;
-  color: #0f172a;
+@layer base {
+  :root {
+    --brand: #0a47b4;
+    --brand-700: #073a91;
+    --accent: #007a47;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-ink-50 text-ink-900 antialiased;
+    font-family: "Pretendard Variable", "Pretendard", -apple-system,
+      BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕",
+      sans-serif;
+    font-feature-settings: "tnum" on, "ss01" on;
+    letter-spacing: -0.005em;
+  }
+  /* iOS 입력 자동 확대 방지 (16px 미만이면 zoom) */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+  @media (min-width: 640px) {
+    input,
+    textarea,
+    select {
+      font-size: 0.95rem;
+    }
+  }
+  /* 포커스 링 KRDS 톤 */
+  :focus-visible {
+    outline: none;
+  }
+  /* 표 셀 줄바꿈 자연스럽게 */
+  td,
+  th {
+    word-break: keep-all;
+  }
+}
+
+@layer components {
+  /* 카드 — 모든 페이지에서 사용하는 표준 컨테이너 */
+  .krds-card {
+    @apply bg-white border border-ink-200 rounded-xl2 shadow-card;
+  }
+  .krds-card-pad {
+    @apply p-4 sm:p-6;
+  }
+
+  /* 페이지 헤더 */
+  .krds-page-header {
+    @apply flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-5 sm:mb-7;
+  }
+  .krds-page-title {
+    @apply text-xl sm:text-2xl font-bold text-ink-900 tracking-tight;
+  }
+  .krds-page-sub {
+    @apply text-sm text-ink-500 mt-1;
+  }
+
+  /* 섹션 헤더 */
+  .krds-section-title {
+    @apply text-base sm:text-lg font-bold text-ink-900 flex items-center gap-2;
+  }
+  .krds-section-title::before {
+    content: "";
+    @apply inline-block w-1 h-4 rounded-sm bg-brand-600;
+  }
+
+  /* 태그 / 배지 */
+  .krds-badge {
+    @apply inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-md;
+  }
+  .krds-badge-brand {
+    @apply bg-brand-50 text-brand-700 border border-brand-100;
+  }
+  .krds-badge-accent {
+    @apply bg-accent-50 text-accent-700 border border-accent-100;
+  }
+  .krds-badge-ink {
+    @apply bg-ink-100 text-ink-700 border border-ink-200;
+  }
+
+  /* 테이블 — 데스크탑 */
+  .krds-table {
+    @apply w-full text-sm;
+  }
+  .krds-table thead {
+    @apply bg-ink-50 text-ink-700;
+  }
+  .krds-table th {
+    @apply px-3 py-2.5 text-left font-semibold border-b border-ink-200;
+  }
+  .krds-table td {
+    @apply px-3 py-3 border-b border-ink-100 align-middle;
+  }
+  .krds-table tbody tr:hover {
+    @apply bg-brand-50/40;
+  }
+  .krds-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  /* 링크 */
+  .krds-link {
+    @apply text-brand-600 hover:text-brand-700 hover:underline underline-offset-2 font-medium;
+  }
 }
