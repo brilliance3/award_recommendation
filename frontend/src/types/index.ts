@@ -96,4 +96,8 @@ export interface URLExtractResponse {
   position?: string;
   merit_keywords: string[];
   raw_text?: string;
+  status?: "ok" | "fetch_failed" | "parse_empty";
+  status_message?: string;
+  page_title?: string;
+  text_length?: number;
 }

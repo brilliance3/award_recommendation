@@ -24,3 +24,8 @@ class URLExtractResponse(BaseModel):
     position: Optional[str] = None
     merit_keywords: List[str] = []
     raw_text: Optional[str] = None
+    # 진단용 — 프론트에서 사용자에게 명확한 피드백을 주기 위해 추가
+    status: str = "ok"  # ok | fetch_failed | parse_empty
+    status_message: Optional[str] = None
+    page_title: Optional[str] = None
+    text_length: int = 0

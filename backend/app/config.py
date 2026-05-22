@@ -33,7 +33,7 @@ DEFAULT_INVESTIGATOR = {
     "department": os.getenv("INV_DEPARTMENT", "경기도의회 보건복지전문위원실"),
     "position": os.getenv("INV_POSITION", "수석전문위원"),
     "rank": os.getenv("INV_RANK", "지방서기관"),
-    "name": os.getenv("INV_NAME", "000"),
+    "name": os.getenv("INV_NAME", ""),
 }
 
 DEFAULT_RECOMMENDER_AGENCY = os.getenv("RECOMMENDER_AGENCY", "경기도의회")

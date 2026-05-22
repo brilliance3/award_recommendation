@@ -6,14 +6,13 @@ import {
   getRecipient,
   updateRecipient,
 } from "../api";
-import type { Recipient } from "../types";
+import type { Recipient, URLExtractResponse } from "../types";
 import Field, { Button, Input } from "../components/Field";
 
 const empty: Partial<Recipient> = {
   recipient_name: "",
   chinese_name: "",
   birth_date: "",
-  birth_yymmdd: "",
   address: "",
   region: "",
   occupation: "",
@@ -33,6 +32,10 @@ export default function RecipientEditPage() {
   const [form, setForm] = useState<Partial<Recipient>>(empty);
   const [url, setUrl] = useState("");
   const [extracting, setExtracting] = useState(false);
+  const [extractResult, setExtractResult] = useState<URLExtractResponse | null>(
+    null
+  );
+  const [extractError, setExtractError] = useState<string | null>(null);
 
   useEffect(() => {
     if (recipientId) getRecipient(recipientId).then(setForm);
@@ -64,15 +67,31 @@ export default function RecipientEditPage() {
   const onExtract = async () => {
     if (!url) return;
     setExtracting(true);
+    setExtractResult(null);
+    setExtractError(null);
     try {
       const res = await extractFromUrl(url);
-      setForm(prev => ({
-        ...prev,
-        recipient_name: res.recipient_name || prev.recipient_name,
-        organization_name: res.organization_name || prev.organization_name,
-        recipient_position_title: res.position || prev.recipient_position_title,
-      }));
-      alert(`추출 완료. 키워드: ${res.merit_keywords.join(", ") || "(없음)"}`);
+      setExtractResult(res);
+      // 실패면 폼에 덮어쓰지 않음
+      if (res.status === "ok") {
+        setForm(prev => ({
+          ...prev,
+          recipient_name: res.recipient_name || prev.recipient_name,
+          organization_name: res.organization_name || prev.organization_name,
+          recipient_position_title:
+            res.position || prev.recipient_position_title,
+        }));
+      }
+    } catch (err: any) {
+      const detail =
+        err?.response?.data?.detail ||
+        err?.response?.statusText ||
+        err?.message ||
+        "알 수 없는 오류";
+      const status = err?.response?.status
+        ? `[HTTP ${err.response.status}] `
+        : "";
+      setExtractError(`${status}${detail}`);
     } finally {
       setExtracting(false);
     }
@@ -99,13 +118,16 @@ export default function RecipientEditPage() {
             <span aria-hidden>🔍</span> URL에서 정보 추출 (선택)
           </div>
           <p className="text-xs text-ink-600 mb-3">
-            홈페이지·뉴스 기사 URL을 넣으면 성명·소속·직위 등을 자동으로 채워 줍니다.
+            지자체·협회 홈페이지 등의 URL을 넣으면 성명·소속·직위·활동 키워드를
+            추정해 자동으로 채워 줍니다. 추출 결과는 반드시 사람이 검토해야
+            합니다.
           </p>
           <div className="flex flex-col sm:flex-row gap-2">
             <Input
               value={url}
               onChange={e => setUrl(e.target.value)}
               placeholder="https://..."
+              inputMode="url"
             />
             <Button
               type="button"
@@ -117,6 +139,87 @@ export default function RecipientEditPage() {
               {extracting ? "추출 중..." : "정보 추출"}
             </Button>
           </div>
+
+          {/* 네트워크/서버 예외 */}
+          {extractError && (
+            <div
+              role="alert"
+              className="mt-3 rounded-lg border border-danger-500/40 bg-danger-50 px-3 py-2 text-sm text-danger-700"
+            >
+              <strong className="font-semibold">요청 실패:</strong> {extractError}
+            </div>
+          )}
+
+          {/* 추출 결과 */}
+          {extractResult &&
+            (extractResult.status === "ok" ? (
+              <div className="mt-3 rounded-lg border border-success-500/40 bg-success-50 px-3 py-2 text-sm">
+                <div className="font-semibold text-success-600 mb-1">
+                  ✓ 추출 완료 — 폼에 자동 적용했습니다. 검토 후 수정해 주세요.
+                </div>
+                <dl className="grid grid-cols-3 gap-x-2 gap-y-1 text-xs text-ink-800">
+                  {extractResult.page_title && (
+                    <>
+                      <dt className="text-ink-500">페이지 제목</dt>
+                      <dd className="col-span-2 truncate">
+                        {extractResult.page_title}
+                      </dd>
+                    </>
+                  )}
+                  <dt className="text-ink-500">성명</dt>
+                  <dd className="col-span-2">
+                    {extractResult.recipient_name || (
+                      <span className="text-ink-400">(미추출)</span>
+                    )}
+                  </dd>
+                  <dt className="text-ink-500">소속</dt>
+                  <dd className="col-span-2">
+                    {extractResult.organization_name || (
+                      <span className="text-ink-400">(미추출)</span>
+                    )}
+                  </dd>
+                  <dt className="text-ink-500">직위</dt>
+                  <dd className="col-span-2">
+                    {extractResult.position || (
+                      <span className="text-ink-400">(미추출)</span>
+                    )}
+                  </dd>
+                  {extractResult.merit_keywords?.length > 0 && (
+                    <>
+                      <dt className="text-ink-500">키워드</dt>
+                      <dd className="col-span-2 flex flex-wrap gap-1">
+                        {extractResult.merit_keywords.map(k => (
+                          <span
+                            key={k}
+                            className="krds-badge krds-badge-accent"
+                          >
+                            {k}
+                          </span>
+                        ))}
+                      </dd>
+                    </>
+                  )}
+                </dl>
+              </div>
+            ) : (
+              <div
+                role="alert"
+                className="mt-3 rounded-lg border border-warn-500/40 bg-warn-50 px-3 py-2 text-sm text-ink-700"
+              >
+                <div className="font-semibold text-warn-600 mb-1">
+                  ⚠ 자동 추출 실패
+                </div>
+                <div className="text-xs leading-relaxed">
+                  {extractResult.status_message ||
+                    "추출된 정보가 없습니다. 수동으로 입력해 주세요."}
+                </div>
+                {extractResult.page_title && (
+                  <div className="mt-1 text-xs text-ink-500 truncate">
+                    페이지 제목: {extractResult.page_title}
+                  </div>
+                )}
+              </div>
+            ))}
         </div>
       )}
 
@@ -135,22 +238,13 @@ export default function RecipientEditPage() {
             />
           </Field>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-          <Field label="생년월일">
-            <Input
-              type="date"
-              value={form.birth_date || ""}
-              onChange={setField("birth_date")}
-            />
-          </Field>
-          <Field label="생년월일(6자리)" hint="예: 810209">
-            <Input
-              value={form.birth_yymmdd || ""}
-              maxLength={6}
-              onChange={setField("birth_yymmdd")}
-            />
-          </Field>
-        </div>
+        <Field label="생년월일">
+          <Input
+            type="date"
+            value={form.birth_date || ""}
+            onChange={setField("birth_date")}
+          />
+        </Field>
         <Field label="주소">
           <Input value={form.address || ""} onChange={setField("address")} />
         </Field>
