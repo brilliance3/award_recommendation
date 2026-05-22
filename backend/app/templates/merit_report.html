@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>공적조서 - {{ recipient_name }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 18mm 18mm 18mm;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    font-family: "Malgun Gothic", "맑은 고딕", "NanumGothic", "Nanum Gothic", "Noto Sans CJK KR", "Apple SD Gothic Neo", sans-serif;
+    color: #000;
+    font-size: 11pt;
+    line-height: 1.55;
+  }
+  h1.cover-title {
+    text-align: center;
+    font-size: 22pt;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    margin: 10mm 0 12mm 0;
+  }
+  h1.doc-title {
+    text-align: center;
+    font-size: 20pt;
+    font-weight: 800;
+    letter-spacing: 0.3em;
+    margin: 6mm 0 8mm 0;
+    text-decoration: underline;
+    text-underline-offset: 6px;
+  }
+  h2.section-title {
+    font-size: 13pt;
+    font-weight: 700;
+    margin: 6mm 0 3mm 0;
+  }
+  .page-break { page-break-after: always; }
+  .keep-together { page-break-inside: avoid; }
+
+  .meta-list { margin: 0; padding-left: 0; list-style: none; }
+  .meta-list li { margin: 2mm 0; }
+  .meta-list .label { display: inline-block; min-width: 38mm; font-weight: 600; }
+
+  table.t {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  table.t th, table.t td {
+    border: 1px solid #000;
+    padding: 6px 8px;
+    vertical-align: middle;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  table.t th {
+    background: #f3f4f6;
+    text-align: center;
+    font-weight: 700;
+  }
+  td.center, th.center { text-align: center; }
+  td.label {
+    background: #f8fafc;
+    width: 24mm;
+    font-weight: 600;
+    text-align: center;
+  }
+  td.label-sm {
+    background: #f8fafc;
+    width: 30mm;
+    font-weight: 600;
+    text-align: center;
+  }
+  .merit-text {
+    white-space: pre-wrap;
+    line-height: 1.7;
+    padding: 4mm 2mm;
+  }
+  .merit-text h3 {
+    font-size: 11pt;
+    font-weight: 700;
+    margin: 4mm 0 1mm 0;
+  }
+  .center-block { text-align: center; }
+  .right-block { text-align: right; }
+  .signature {
+    margin-top: 10mm;
+    text-align: center;
+    font-size: 12pt;
+  }
+  .signature .date { margin: 6mm 0; }
+  .signature .name { margin-top: 4mm; font-weight: 700; }
+  .footer-title {
+    margin-top: 14mm;
+    text-align: center;
+    font-size: 18pt;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+  }
+  .small { font-size: 10pt; color: #444; }
+  .reco-list { margin: 0 0 4mm 0; padding-left: 5mm; }
+  .reco-list li { margin: 1mm 0; }
+</style>
+</head>
+<body>
+
+<!-- ============================================ -->
+<!-- 1. 표지 - 표창 추천개요 -->
+<!-- ============================================ -->
+<section class="cover">
+  <h1 class="cover-title">{{ recommender_agency }} {{ award_grade_short }} 추천</h1>
+
+  <h2 class="section-title">□ 표창 추천개요</h2>
+  <ul class="meta-list">
+    <li><span class="label">○ 훈　격</span>: {{ award_grade }}</li>
+    <li><span class="label">○ 추천기관 또는 의원</span>: {{ recommender_full_title }}</li>
+    <li><span class="label">○ 추천대상자({{ recipient_count }}명)</span></li>
+  </ul>
+
+  <table class="t" style="margin-top:2mm;">
+    <colgroup>
+      <col style="width:14%" />
+      <col style="width:14%" />
+      <col style="width:18%" />
+      <col style="width:10%" />
+      <col style="width:16%" />
+      <col style="width:10%" />
+      <col style="width:18%" />
+    </colgroup>
+    <thead>
+      <tr>
+        <th>이름</th>
+        <th>생년월일</th>
+        <th>소속기관<br/><span class="small">(없을 경우 주소)</span></th>
+        <th>직 위</th>
+        <th>공적 분야</th>
+        <th>공적<br/>기간</th>
+        <th>표창일</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="center">{{ recipient_name }}</td>
+        <td class="center">{{ birth_date }}</td>
+        <td class="center">{{ organization_name or address }}</td>
+        <td class="center">{{ recipient_position_title }}</td>
+        <td class="center">{{ merit_category }}</td>
+        <td class="center">{{ merit_period }}</td>
+        <td class="center">{{ award_date_short }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-title">○ 추천사유</h2>
+  <ul class="reco-list">
+    <li>{{ recommendation_reason or '-' }}</li>
+  </ul>
+
+  <div class="signature">
+    <div>이상은 사실과 다름이 없음을 확인합니다.</div>
+    <div class="date">{{ recommendation_date }}</div>
+    <div class="name">추천(의뢰)자 : {{ recommender_full_title }} {{ recommender_name }} (인)</div>
+  </div>
+
+  <div class="small" style="margin-top:8mm;">붙임 : 공적조서, 현지조사확인서 각 1부.  끝.</div>
+  <div class="footer-title">{{ recommender_agency }} {{ award_grade_authority }} 귀하</div>
+</section>
+<div class="page-break"></div>
+
+<!-- ============================================ -->
+<!-- 2. 공적조서 -->
+<!-- ============================================ -->
+<section class="merit-report">
+  <h1 class="doc-title">공 적 조 서</h1>
+
+  <table class="t">
+    <colgroup>
+      <col style="width:24%" />
+      <col style="width:26%" />
+      <col style="width:24%" />
+      <col style="width:26%" />
+    </colgroup>
+    <tbody>
+      <tr>
+        <td class="label">(1) 성　명</td>
+        <td class="center"><strong>{{ recipient_name }}</strong></td>
+        <td class="label">(한 자)</td>
+        <td class="center">{{ chinese_name }}</td>
+      </tr>
+      <tr>
+        <td class="label">(2) 생년월일</td>
+        <td class="center" colspan="3">{{ birth_date }}</td>
+      </tr>
+      <tr>
+        <td class="label">(3) 군번<br/><span class="small">(군인의 경우)</span></td>
+        <td class="center">-</td>
+        <td class="label">(4) 국적<br/><span class="small">(외국인의 경우)</span></td>
+        <td class="center">-</td>
+      </tr>
+      <tr>
+        <td class="label">(5) 주　소</td>
+        <td colspan="3" class="center">{{ address }}</td>
+      </tr>
+      <tr>
+        <td class="label">(6) 직　업</td>
+        <td class="center">{{ occupation }}</td>
+        <td class="label">(7) 소　속</td>
+        <td class="center">{{ organization_name }}</td>
+      </tr>
+      <tr>
+        <td class="label">(8) 직　급</td>
+        <td class="center">{{ rank_field or '' }}</td>
+        <td class="label">(9) 직　위</td>
+        <td class="center">{{ recipient_position_title }}</td>
+      </tr>
+      <tr>
+        <td class="label">(10) 대외직명</td>
+        <td colspan="3" class="center">{{ external_title or recipient_position_title }}</td>
+      </tr>
+      <tr>
+        <td class="label">(11) 공적기간<br/><span class="small">(최소 2년 이상 기재)</span></td>
+        <td class="center">{{ merit_period }}</td>
+        <td class="label">(12) 공적분야</td>
+        <td class="center">{{ merit_category }}</td>
+      </tr>
+      <tr>
+        <td class="label" colspan="4" style="text-align:left; padding:6px 10px;">
+          (13) 공적요지(50자 내외)
+        </td>
+      </tr>
+      <tr>
+        <td colspan="4" style="min-height:35mm;">
+          <div class="merit-text">{{ merit_short_summary }}</div>
+        </td>
+      </tr>
+      <tr>
+        <td class="label">(14) 추천훈격</td>
+        <td class="center">{{ award_grade }}</td>
+        <td class="label">(15) 추천순위</td>
+        <td class="center">{{ recommendation_rank }}</td>
+      </tr>
+      <tr>
+        <th colspan="4" class="center">조 　 사 　 자</th>
+      </tr>
+      <tr>
+        <td class="label">(16) 소　속</td>
+        <td class="center">{{ investigator_department }}</td>
+        <td class="label">(17) 직　위</td>
+        <td class="center">{{ investigator_position }}</td>
+      </tr>
+      <tr>
+        <td class="label">(18) 직　급</td>
+        <td class="center">{{ investigator_rank }}</td>
+        <td class="label">(19) 성　명</td>
+        <td class="center">{{ investigator_name }} (인)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top:10mm; text-align:center;">
+    위 기록이 틀림없음을 확인합니다.
+  </div>
+  <div style="margin-top:4mm; text-align:center;">
+    {{ recommendation_date }}
+  </div>
+  <div style="margin-top:8mm; text-align:center; font-weight:700;">
+    추 천 관 　 {{ recommender_full_title }} {{ recommender_name }} (인)
+  </div>
+</section>
+<div class="page-break"></div>
+
+<!-- ============================================ -->
+<!-- 3. 주요경력 / 과거표창기록 / 공적사항 -->
+<!-- ============================================ -->
+<section class="careers">
+  <table class="t">
+    <thead>
+      <tr><th colspan="4">주 　 요 　 경 　 력</th></tr>
+      <tr>
+        <th style="width:18%">(19) 년 월 일</th>
+        <th style="width:32%">(20) 이　력</th>
+        <th style="width:18%">(21) 년 월 일</th>
+        <th style="width:32%">(22) 이　력</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set pairs = career_pairs %}
+      {% if pairs %}
+        {% for left, right in pairs %}
+        <tr>
+          <td class="center">{{ left.record_date if left else '' }}</td>
+          <td>{{ left.description if left else '' }}</td>
+          <td class="center">{{ right.record_date if right else '' }}</td>
+          <td>{{ right.description if right else '' }}</td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td>　</td><td></td><td></td><td></td></tr>
+        <tr><td></td><td></td><td></td><td></td></tr>
+        <tr><td></td><td></td><td></td><td></td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  <table class="t" style="margin-top:4mm;">
+    <thead>
+      <tr><th colspan="4">과거 표창기록 (훈장·포장·표창별로 기록)</th></tr>
+      <tr>
+        <th style="width:18%">(23) 년 월 일</th>
+        <th style="width:32%">(24) 내　용</th>
+        <th style="width:18%">(25) 년 월 일</th>
+        <th style="width:32%">(26) 내　용</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set apairs = award_pairs %}
+      {% if apairs %}
+        {% for left, right in apairs %}
+        <tr>
+          <td class="center">{{ left.award_date if left else '' }}</td>
+          <td>{{ left.description if left else '' }}</td>
+          <td class="center">{{ right.award_date if right else '' }}</td>
+          <td>{{ right.description if right else '' }}</td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td>　</td><td></td><td></td><td></td></tr>
+        <tr><td></td><td></td><td></td><td></td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  <table class="t" style="margin-top:4mm;">
+    <thead>
+      <tr><th>(27) 공 　 적 　 사 　 항</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <div class="merit-text">{{ full_merit_text }}</div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+<div class="page-break"></div>
+
+<!-- ============================================ -->
+<!-- 4. 현지조사 사실확인서 -->
+<!-- ============================================ -->
+<section class="investigation">
+  <h1 class="doc-title">현 지 조 사 사 실 확 인 서</h1>
+
+  <h2 class="section-title">□ 인적사항</h2>
+  <ul class="meta-list">
+    <li><span class="label">○ 성　명</span>: {{ recipient_name }}</li>
+    <li><span class="label">○ 생년월일</span>: {{ birth_date }}</li>
+    <li><span class="label">○ 직　업</span>: {{ occupation }}</li>
+    <li><span class="label">○ 주　소</span>: {{ address }}</li>
+  </ul>
+
+  <h2 class="section-title">□ 현지조사 확인내용</h2>
+  <ul class="meta-list">
+    <li><span class="label">○ 성　품</span>: {{ character_assessment }}</li>
+    <li><span class="label">○ 지역여론</span><span class="small">(公私生活 등)</span>: {{ local_reputation }}</li>
+    <li><span class="label">○ 공적사항</span><span class="small">(공적내용과 일치여부)</span>: {{ merit_consistency }}</li>
+  </ul>
+
+  <div class="right-block" style="margin-top:8mm;">{{ recommendation_date }}</div>
+
+  <div style="margin-top:8mm;"><strong>(현지조사자)</strong></div>
+  <div class="right-block" style="margin-top:2mm;">
+    소　속: {{ investigator_department }}<br/>
+    직　급: {{ investigator_rank }}<br/>
+    성　명: {{ investigator_name }} (인)
+  </div>
+</section>
+
+</body>
+</html>

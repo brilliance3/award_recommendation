@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.env
+.env.local
+
+# Database / outputs
+backend/storage/app.db
+backend/storage/generated/*
+backend/storage/uploads/*
+!backend/storage/generated/.gitkeep
+!backend/storage/uploads/.gitkeep
+
+# Node
+node_modules/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store

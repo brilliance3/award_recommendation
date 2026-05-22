@@ -1,0 +1,12 @@
+version: "3.9"
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/storage:/app/storage
+    environment:
+      - DATABASE_URL=sqlite:///./storage/app.db
+      - PDF_ENGINE=weasyprint
+      - ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
