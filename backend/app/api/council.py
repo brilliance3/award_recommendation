@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..database import get_db
 from ..services.council_seeder import seed_all
+from ..services.demo_seeder import seed_demo_data
 
 router = APIRouter(prefix="/api/council", tags=["council"])
 
@@ -90,3 +91,12 @@ def member_as_recommender(member_id: str, db: Session = Depends(get_db)):
 def reseed(db: Session = Depends(get_db)):
     """수동으로 시드 재실행. 운영 환경에서 의원 정보 갱신 시 사용."""
     return seed_all(db)
+
+
+@router.post("/seed-demo")
+def seed_demo(n: int = 50, db: Session = Depends(get_db)):
+    """데모/테스트용 표창 대상자 N명 생성 ([DEMO] 표시 케이스).
+
+    멱등성: 기존 [DEMO] 케이스는 모두 삭제 후 재생성.
+    """
+    return seed_demo_data(db, n_recipients=n)

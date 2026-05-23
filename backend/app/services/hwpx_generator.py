@@ -27,12 +27,13 @@ from ..config import (
 )
 from ..models import AwardCase, Recipient
 
-HWPX_BASE_DIR = TEMPLATE_DIR / "hwpx_base"
-SECTION_TEMPLATE_NAME = "hwpx_merit_section.xml.j2"
+HWPX_BASE_DIR = TEMPLATE_DIR / "hwpx_award"
+SECTION_TEMPLATE_NAME = "hwpx_award_section.xml.j2"
 
+# XML autoescape 활성화 — 한글 문자열에 <, >, & 가 들어가도 안전
 _jinja = Environment(
     loader=FileSystemLoader(str(TEMPLATE_DIR)),
-    autoescape=select_autoescape(disabled_extensions=("j2",), default_for_string=False),
+    autoescape=select_autoescape(["xml", "j2"]),
     keep_trailing_newline=True,
 )
 
@@ -114,18 +115,43 @@ def _render_section_xml(case: AwardCase, r: Recipient) -> str:
         f"{DEFAULT_RECOMMENDER_AGENCY} {case.recommender_position}"
     )
 
+    inv_dept = (mc.investigator_department if mc and mc.investigator_department else DEFAULT_INVESTIGATOR["department"])
+    inv_pos = (mc.investigator_position if mc and mc.investigator_position else DEFAULT_INVESTIGATOR["position"])
+    inv_rank = (mc.investigator_rank if mc and mc.investigator_rank else DEFAULT_INVESTIGATOR["rank"])
+    inv_name = (mc.investigator_name if mc and mc.investigator_name else DEFAULT_INVESTIGATOR["name"]) or ""
+
     ctx = {
+        # 인적사항
         "recipient_name": r.recipient_name or "",
-        "personal_rows": _personal_rows(case, r),
+        "chinese_name": r.chinese_name or "",
+        "birth_date": _fmt_date(r.birth_date),
+        "military_id": getattr(r, "military_id", "") or "-",
+        "nationality": getattr(r, "nationality", "") or "대한민국",
+        "address": r.address or "",
+        "occupation": r.occupation or "",
+        "organization_name": r.organization_name or "",
+        "rank_field": "",
+        "recipient_position_title": r.recipient_position_title or "",
+        "external_title": r.external_title or r.recipient_position_title or "",
+        # 공적
+        "merit_period": r.merit_period or "",
+        "merit_category": r.merit_category or "",
+        "award_grade": case.award_grade or "",
+        "recommendation_rank": r.recommendation_rank or "1순위",
         "merit_short_summary": merit_summary,
         "merit_lines": _split_text_lines(merit_text),
         "career_lines": _career_lines(r),
         "previous_award_lines": _previous_award_lines(r),
         "recommendation_reason": reason or "-",
+        # 조사자
+        "investigator_department": inv_dept,
+        "investigator_position": inv_pos,
+        "investigator_rank": inv_rank,
+        "investigator_name": inv_name,
+        # 추천자
         "recommendation_date": _fmt_date(case.recommendation_date or case.award_date),
         "recommender_full_title": recommender_full,
         "recommender_name": case.recommender_name or "",
-        "award_grade": case.award_grade or "",
     }
     template = _jinja.get_template(SECTION_TEMPLATE_NAME)
     return template.render(**ctx)

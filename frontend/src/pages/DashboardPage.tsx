@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { deleteCase, listCases } from "../api";
+import { deleteCase, listCases, seedDemoData } from "../api";
 import type { AwardCase } from "../types";
 import { Button } from "../components/Field";
 
@@ -34,7 +34,21 @@ export default function DashboardPage() {
             추천 표창 건을 등록·관리하고 공적조서 PDF·XLSX를 생성합니다.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="md"
+            variant="secondary"
+            onClick={async () => {
+              if (!confirm("[DEMO] 표시된 가상 표창 건 3개와 대상자 50명을 새로 생성합니다.\n기존 [DEMO] 데이터는 자동 삭제됩니다. 계속할까요?"))
+                return;
+              const r = await seedDemoData(50);
+              alert(`완료: ${r.demo_recipients}명 / ${r.demo_cases.length}건`);
+              load();
+            }}
+            className="w-full sm:w-auto"
+          >
+            🧪 데모 데이터 50명 생성
+          </Button>
           <Button
             size="md"
             onClick={() => navigate("/cases/new")}
