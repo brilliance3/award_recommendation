@@ -1,15 +1,33 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { deleteRecipient, getCase, importXlsx } from "../api";
+import { deleteRecipient, getCase, importXlsx, inviteApi } from "../api";
 import type { AwardCaseDetail } from "../types";
 import { Button } from "../components/Field";
+import ShareLinksModal from "../components/ShareLinksModal";
 
 export default function RecipientListPage() {
   const { caseId = "" } = useParams();
   const [detail, setDetail] = useState<AwardCaseDetail | null>(null);
   const [q, setQ] = useState("");
+  const [showShare, setShowShare] = useState(false);
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const issueInvite = async (rid: string, name: string) => {
+    try {
+      const r = await inviteApi.issue(rid);
+      const url = `${window.location.origin}${r.public_url}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        alert(`✓ ${name} 입력 링크가 복사되었습니다.\n\n${url}`);
+      } catch {
+        prompt("아래 링크를 복사해서 대상자에게 전달하세요:", url);
+      }
+      load();
+    } catch (e: any) {
+      alert("발급 실패: " + (e?.response?.data?.detail || e?.message));
+    }
+  };
 
   const load = () => getCase(caseId).then(setDetail);
   useEffect(() => {
@@ -84,6 +102,13 @@ export default function RecipientListPage() {
             ＋ 대상자 추가
           </Button>
           <Button
+            variant="secondary"
+            onClick={() => setShowShare(true)}
+            title="모든 대상자에게 입력 링크 일괄 발급/공유"
+          >
+            🔗 공유
+          </Button>
+          <Button
             variant="accent"
             onClick={() => navigate(`/cases/${caseId}/download`)}
           >
@@ -141,13 +166,31 @@ export default function RecipientListPage() {
                       <Link className="krds-link" to={`/recipients/${r.id}`}>
                         {r.recipient_name}
                       </Link>
+                      {(r as any).status === "submitted_by_recipient" && (
+                        <span className="ml-2 krds-status krds-status-submitted">
+                          ✓ 제출
+                        </span>
+                      )}
+                      {(r as any).status === "invited" && (
+                        <span className="ml-2 krds-status krds-status-invited">
+                          ⌛ 작성중
+                        </span>
+                      )}
                     </td>
                     <td>{r.birth_date || "-"}</td>
                     <td>{r.organization_name || "-"}</td>
                     <td>{r.recipient_position_title || "-"}</td>
                     <td>{r.merit_category || "-"}</td>
                     <td className="text-right">
-                      <div className="inline-flex gap-1.5">
+                      <div className="inline-flex gap-1.5 flex-wrap">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => issueInvite(r.id, r.recipient_name)}
+                          title="대상자 본인 입력 링크 발급+복사"
+                        >
+                          🔗 링크
+                        </Button>
                         <Button
                           size="sm"
                           variant="secondary"
@@ -248,6 +291,17 @@ export default function RecipientListPage() {
           ))
         )}
       </div>
+
+      {showShare && (
+        <ShareLinksModal
+          caseId={caseId}
+          caseTitle={detail.title}
+          onClose={() => {
+            setShowShare(false);
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -7,7 +7,17 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .api import ai, award_cases, council, documents, merit_contents, recipients
+from .api import (
+    ai,
+    award_cases,
+    bulk,
+    council,
+    documents,
+    invite,
+    merit_contents,
+    recipients,
+    stats,
+)
 from .config import ALLOWED_ORIGINS
 from .database import init_db
 
@@ -94,6 +104,9 @@ def create_app() -> FastAPI:
     app.include_router(documents.router)
     app.include_router(council.router)
     app.include_router(ai.router)
+    app.include_router(invite.router)
+    app.include_router(bulk.router)
+    app.include_router(stats.router)
 
     return app
 

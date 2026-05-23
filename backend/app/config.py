@@ -24,6 +24,9 @@ elif DATABASE_URL.startswith("postgresql://") and "+psycopg" not in DATABASE_URL
 # LLM (선택) - 환경변수가 있을 때만 호출
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+# OpenAI 모델 (기본: gpt-5.4-mini, 없으면 gpt-5-mini, gpt-4o-mini 순으로 폴백)
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
+OPENAI_FALLBACK_MODELS = ["gpt-5-mini", "gpt-4o-mini"]
 
 # PDF 엔진 선택: "playwright" 또는 "weasyprint" (운영기본=playwright)
 PDF_ENGINE = os.getenv("PDF_ENGINE", "playwright")

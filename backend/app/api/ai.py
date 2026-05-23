@@ -49,3 +49,28 @@ def ai_polish(payload: PolishRequest):
 def ai_summarize(payload: SummarizeRequest):
     r = openai_service.summarize_merit(payload.text, payload.max_chars)
     return AIResponse(ok=r.ok, text=r.text, model=r.model, error=r.error)
+
+
+class ABRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=10000)
+
+
+class ABResponse(BaseModel):
+    a: AIResponse
+    b: AIResponse
+
+
+@router.post("/polish-ab", response_model=ABResponse)
+def ai_polish_ab(payload: ABRequest):
+    """같은 텍스트로 2가지 다른 안(보수적 vs 적극적)을 생성 - 사용자가 선택."""
+    prompt = (
+        "다음 글을 행정문서 문체로 다듬어 주세요. "
+        "의미와 사실은 유지하고, 어색한 표현·구어체·중복을 정리. "
+        "분량은 원문과 비슷하게 유지.\n\n---\n"
+        f"{payload.text}\n---\n\n다듬은 결과만 출력. 마크다운 금지."
+    )
+    a, b = openai_service.ab_variants(prompt)
+    return ABResponse(
+        a=AIResponse(ok=a.ok, text=a.text, model=a.model, error=a.error),
+        b=AIResponse(ok=b.ok, text=b.text, model=b.model, error=b.error),
+    )

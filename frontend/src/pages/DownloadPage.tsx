@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
+  bulkApi,
   generateAll,
   generateHwpx,
   generateXlsx,
@@ -45,6 +46,20 @@ export default function DownloadPage() {
     setBusy(true);
     try {
       setZipFile(await generateZip(caseId));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onBulkAI = async () => {
+    if (!confirm(`${detail.recipient_count}명의 대상자에게 일괄 AI 초안을 생성합니다.\n기존 본문이 있는 대상자는 자동으로 건너뜁니다. 계속할까요?`))
+      return;
+    setBusy(true);
+    try {
+      const r = await bulkApi.aiMerit(caseId, { keywords: ["봉사", "헌신", "지역사회 화합"] });
+      alert(`완료\n  총 ${r.total}명\n  생성: ${r.success}명\n  건너뜀: ${r.skipped}명\n  실패: ${r.failed}명`);
+    } catch (e: any) {
+      alert(`일괄 AI 실패: ${e?.response?.data?.detail || e?.message}`);
     } finally {
       setBusy(false);
     }
@@ -104,18 +119,21 @@ export default function DownloadPage() {
       <div className="krds-card krds-card-pad space-y-5">
         <div>
           <h2 className="krds-section-title mb-3">생성 옵션</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <Button variant="secondary" disabled={busy} onClick={onBulkAI}>
+              ✨ AI 일괄 초안
+            </Button>
             <Button variant="secondary" disabled={busy} onClick={onGenXlsx}>
-              01·03 XLSX만 생성
+              01·03 XLSX
             </Button>
             <Button disabled={busy} onClick={onGenAll}>
-              전체 파일(PDF+XLSX)
+              전체 (PDF+XLSX)
             </Button>
             <Button variant="secondary" disabled={busy} onClick={onGenHwpx}>
-              📄 HWPX 일괄 생성
+              📄 HWPX 일괄
             </Button>
             <Button variant="accent" disabled={busy} onClick={onGenZip}>
-              ZIP 다운로드 생성
+              ZIP 다운로드
             </Button>
             <Button
               variant="ghost"

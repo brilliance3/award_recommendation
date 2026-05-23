@@ -3,10 +3,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { deleteCase, listCases, seedDemoData } from "../api";
 import type { AwardCase } from "../types";
 import { Button } from "../components/Field";
+import ShareLinksModal from "../components/ShareLinksModal";
 
 export default function DashboardPage() {
   const [cases, setCases] = useState<AwardCase[]>([]);
   const [loading, setLoading] = useState(true);
+  const [shareCase, setShareCase] = useState<AwardCase | null>(null);
   const navigate = useNavigate();
 
   const load = () => {
@@ -140,6 +142,14 @@ export default function DashboardPage() {
                           <Button
                             size="sm"
                             variant="secondary"
+                            onClick={() => setShareCase(c)}
+                            title="대상자별 입력 링크 공유"
+                          >
+                            🔗 공유
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
                             onClick={() =>
                               navigate(`/cases/${c.id}/download`)
                             }
@@ -196,13 +206,20 @@ export default function DashboardPage() {
                     {c.award_date || "-"}
                   </dd>
                 </dl>
-                <div className="mt-4 grid grid-cols-3 gap-2">
+                <div className="mt-4 grid grid-cols-2 gap-2">
                   <Button
                     size="sm"
                     variant="secondary"
                     onClick={() => navigate(`/cases/${c.id}`)}
                   >
                     대상자
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setShareCase(c)}
+                  >
+                    🔗 공유
                   </Button>
                   <Button
                     size="sm"
@@ -223,6 +240,14 @@ export default function DashboardPage() {
             ))}
           </ul>
         </>
+      )}
+
+      {shareCase && (
+        <ShareLinksModal
+          caseId={shareCase.id}
+          caseTitle={shareCase.title}
+          onClose={() => setShareCase(null)}
+        />
       )}
     </div>
   );

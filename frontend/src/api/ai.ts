@@ -13,4 +13,9 @@ export const aiApi = {
     api
       .post<AIResponse>("/api/ai/summarize", { text, max_chars })
       .then((r) => r.data),
+
+  polishAB: (text: string) =>
+    api
+      .post<{ a: AIResponse; b: AIResponse }>("/api/ai/polish-ab", { text })
+      .then((r) => r.data),
 };
