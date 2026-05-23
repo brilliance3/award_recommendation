@@ -4,6 +4,7 @@ import { deleteCase, listCases, seedDemoData } from "../api";
 import type { AwardCase } from "../types";
 import { Button } from "../components/Field";
 import ShareLinksModal from "../components/ShareLinksModal";
+import GacSymbol from "../components/GacSymbol";
 
 export default function DashboardPage() {
   const [cases, setCases] = useState<AwardCase[]>([]);
@@ -29,11 +30,42 @@ export default function DashboardPage() {
 
   return (
     <div>
+      {/* === GAC CI 히어로 섹션 === */}
+      <section className="relative overflow-hidden rounded-2xl mb-6 sm:mb-8 bg-gradient-to-br from-brand-700 via-brand-600 to-accent-600 text-white">
+        {/* 장식 — 우측에 큰 GAC 심볼 워터마크 */}
+        <div className="absolute right-0 top-0 bottom-0 opacity-10 pointer-events-none">
+          <GacSymbol size={280} color="#FFFFFF" />
+        </div>
+        <div className="relative px-5 sm:px-8 py-6 sm:py-10">
+          <div className="flex items-center gap-3 mb-3 sm:mb-4">
+            <span className="flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-white shadow-pop">
+              <GacSymbol size={44} color="#3C5D93" />
+            </span>
+            <div>
+              <div className="text-xs sm:text-sm font-bold tracking-widest opacity-90">
+                GAC · GYEONGGI-DO ASSEMBLY
+              </div>
+              <div className="text-lg sm:text-2xl font-extrabold">경기도의회</div>
+            </div>
+          </div>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold leading-tight">
+            공적조서 자동작성 시스템
+          </h1>
+          <p className="mt-2 sm:mt-3 text-sm sm:text-base text-white/85 italic">
+            사람중심 · 민생중심 · 의회다운 의회
+          </p>
+          <p className="mt-3 sm:mt-4 text-sm sm:text-base text-white/90 max-w-2xl">
+            표창 추천 대상자가 직접 정보를 입력하고, 사무처 직원이 AI 보조로 공적사항을
+            작성하여 한글(HWPX) · PDF · 엑셀로 일괄 출력하는 통합 행정 시스템입니다.
+          </p>
+        </div>
+      </section>
+
       <div className="krds-page-header">
         <div>
           <h1 className="krds-page-title">표창 건 목록</h1>
           <p className="krds-page-sub">
-            추천 표창 건을 등록·관리하고 공적조서 PDF·XLSX를 생성합니다.
+            추천 표창 건을 등록·관리하고 공적조서 PDF·HWPX·XLSX를 생성합니다.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import GacSymbol from "./GacSymbol";
 
 const nav = [
   { to: "/", label: "대시보드", end: true },
@@ -18,11 +19,19 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex flex-col bg-ink-50">
-      {/* 상단 정부 표기 바 — KRDS 스타일 슬림 바 */}
-      <div className="bg-ink-900 text-ink-100 text-[11px] sm:text-xs">
+      {/* 상단 정부 표기 바 — KRDS 슬림 바 + GAC 슬로건 */}
+      <div className="bg-brand-700 text-white text-[11px] sm:text-xs">
         <div className="max-w-page mx-auto px-4 sm:px-6 lg:px-8 h-7 flex items-center justify-between">
-          <span className="tracking-wide">경기도의회 · GYEONGGI PROVINCIAL COUNCIL</span>
-          <span className="hidden sm:inline text-ink-300">행정 내부 시스템</span>
+          <span className="tracking-wide font-semibold">
+            경기도의회 · GYEONGGI-DO ASSEMBLY
+          </span>
+          <span className="hidden sm:flex items-center gap-2">
+            <span className="opacity-80 italic">
+              사람중심 · 민생중심 · 의회다운 의회
+            </span>
+            <span className="opacity-50">|</span>
+            <span className="opacity-80">행정 내부 시스템</span>
+          </span>
         </div>
       </div>
 
@@ -33,28 +42,23 @@ export default function Layout() {
             to="/"
             className="flex items-center gap-3 min-w-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded"
           >
-            {/* 워드마크 심볼 */}
+            {/* GAC 무궁화 심벌 — 경기도의회 CI */}
             <span
               aria-hidden
-              className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-gradient-to-br from-brand-600 to-accent-600 text-white shadow-card"
+              className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-white border-2 border-brand-600 shadow-card flex-shrink-0"
             >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                className="h-5 w-5 sm:h-6 sm:w-6"
-                aria-hidden="true"
-              >
-                <path
-                  d="M12 2l2.4 5 5.6.8-4 4 1 5.7L12 14.9 6.9 17.5l1-5.7-4-4 5.6-.8L12 2z"
-                  fill="currentColor"
-                />
-              </svg>
+              <GacSymbol size={28} color="#3C5D93" className="sm:scale-110" />
             </span>
-            <span className="min-w-0">
-              <span className="block text-[11px] sm:text-xs font-semibold text-brand-700 leading-none">
-                경기도의회
+            <span className="min-w-0 flex flex-col">
+              <span className="flex items-baseline gap-1.5 leading-none">
+                <span className="text-[10px] sm:text-[11px] font-bold tracking-widest text-brand-700">
+                  GAC
+                </span>
+                <span className="text-[10px] sm:text-[11px] font-semibold text-ink-500">
+                  경기도의회
+                </span>
               </span>
-              <span className="block text-sm sm:text-base font-bold text-ink-900 leading-tight truncate">
+              <span className="block text-sm sm:text-base font-bold text-ink-900 leading-tight truncate mt-0.5">
                 공적조서 자동작성 시스템
               </span>
             </span>
@@ -137,15 +141,29 @@ export default function Layout() {
       </main>
 
       <footer className="border-t border-ink-200 bg-white">
-        <div className="max-w-page mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between text-xs text-ink-500">
-          <div>
-            <span className="font-semibold text-ink-700">경기도의회</span>
-            <span className="mx-2 text-ink-300">|</span>
-            보건복지전문위원실
-          </div>
-          <div>
-            © {new Date().getFullYear()} 공적조서 자동작성 시스템. 행정 업무용
-            내부 시스템.
+        <div className="max-w-page mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+          <div className="flex flex-col sm:flex-row gap-4 sm:items-start sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 border border-brand-200 flex-shrink-0">
+                <GacSymbol size={32} color="#3C5D93" />
+              </span>
+              <div>
+                <div className="text-sm font-bold text-ink-900">
+                  경기도의회 <span className="text-brand-700">GAC</span>
+                </div>
+                <div className="text-xs text-ink-500 mt-0.5 italic">
+                  사람중심 · 민생중심 · 의회다운 의회
+                </div>
+                <div className="text-xs text-ink-500 mt-1">
+                  16429 경기도 수원시 영통구 도청로 30
+                </div>
+              </div>
+            </div>
+            <div className="text-xs text-ink-500 sm:text-right space-y-1">
+              <div>공적조서 자동작성 시스템 v0.2</div>
+              <div>© {new Date().getFullYear()} 경기도의회 사무처</div>
+              <div className="text-ink-400">행정 업무용 내부 시스템</div>
+            </div>
           </div>
         </div>
       </footer>

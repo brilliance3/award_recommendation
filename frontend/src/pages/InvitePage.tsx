@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { inviteApi, type PublicRecipient } from "../api/invite";
 import PostcodeInput from "../components/PostcodeInput";
+import GacSymbol from "../components/GacSymbol";
 
 /**
  * 표창 추천 대상자가 본인 정보를 직접 입력하는 공개 페이지.
@@ -101,13 +102,31 @@ export default function InvitePage() {
 
   return (
     <div className="min-h-screen bg-ink-50">
-      {/* 헤더 — 정부 사이트 톤 */}
-      <header className="bg-brand-600 text-white">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4">
-          <p className="text-xs opacity-80">경기도의회 · 공적조서 자동작성 시스템</p>
-          <h1 className="text-lg sm:text-xl font-bold mt-1">
-            표창 추천 대상자 정보 입력
-          </h1>
+      {/* 상단 슬림 바 */}
+      <div className="bg-brand-700 text-white text-xs">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 h-7 flex items-center justify-between">
+          <span className="font-semibold tracking-wide">
+            경기도의회 · GAC
+          </span>
+          <span className="hidden sm:inline opacity-80 italic">
+            사람중심 · 민생중심 · 의회다운 의회
+          </span>
+        </div>
+      </div>
+      {/* CI 헤더 */}
+      <header className="bg-gradient-to-r from-brand-600 to-accent-600 text-white">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-5 sm:py-6 flex items-center gap-4">
+          <span className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white flex-shrink-0">
+            <GacSymbol size={36} color="#3C5D93" />
+          </span>
+          <div>
+            <p className="text-xs opacity-90 font-semibold tracking-wide">
+              경기도의회 공적조서 자동작성 시스템
+            </p>
+            <h1 className="text-lg sm:text-xl font-extrabold mt-0.5">
+              표창 추천 대상자 정보 입력
+            </h1>
+          </div>
         </div>
       </header>
 
