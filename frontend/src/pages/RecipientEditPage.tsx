@@ -14,7 +14,9 @@ const empty: Partial<Recipient> = {
   chinese_name: "",
   birth_date: "",
   address: "",
+  registered_address: "",
   region: "",
+  nationality: "대한민국",
   occupation: "",
   organization_name: "",
   recipient_position_title: "",
@@ -245,12 +247,24 @@ export default function RecipientEditPage() {
             onChange={setField("birth_date")}
           />
         </Field>
-        <Field label="주소">
+        <Field label="현주소">
           <Input value={form.address || ""} onChange={setField("address")} />
         </Field>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <Field label="등록기준지 (선택)">
+          <Input
+            value={form.registered_address || ""}
+            onChange={setField("registered_address")}
+          />
+        </Field>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4">
           <Field label="지역">
             <Input value={form.region || ""} onChange={setField("region")} />
+          </Field>
+          <Field label="국적">
+            <Input
+              value={form.nationality || "대한민국"}
+              onChange={setField("nationality")}
+            />
           </Field>
           <Field label="직업">
             <Input

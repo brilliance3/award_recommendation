@@ -5,6 +5,7 @@ from .merit_content import MeritContent
 from .career_record import CareerRecord
 from .previous_award import PreviousAward
 from .generated_document import GeneratedDocument
+from .council_member import CouncilMember, CouncilCommittee
 
 __all__ = [
     "AwardCase",
@@ -13,4 +14,6 @@ __all__ = [
     "CareerRecord",
     "PreviousAward",
     "GeneratedDocument",
+    "CouncilMember",
+    "CouncilCommittee",
 ]

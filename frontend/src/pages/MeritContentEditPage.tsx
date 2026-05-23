@@ -3,8 +3,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   addCareer,
   addPreviousAward,
+  aiApi,
   deleteCareer,
   deletePreviousAward,
+  generateHwpx,
   generateMerit,
   generatePdf,
   getRecipient,
@@ -63,6 +65,57 @@ export default function MeritContentEditPage() {
     if (res.files[0]) window.open(absoluteUrl(res.files[0].download_url), "_blank");
   };
 
+  const onGenerateHwpx = async () => {
+    await upsertMerit(recipientId, mc);
+    try {
+      const res = await generateHwpx(recipientId);
+      if (res.files[0])
+        window.open(absoluteUrl(res.files[0].download_url), "_blank");
+    } catch (e: any) {
+      alert(`HWPX 생성 실패: ${e?.response?.data?.detail || e?.message || e}`);
+    }
+  };
+
+  const polishField = async (
+    fieldKey: "merit_short_summary" | "recommendation_reason" | "full_merit_text"
+  ) => {
+    const current = (mc as any)[fieldKey] || "";
+    if (!current.trim()) {
+      alert("다듬을 내용이 비어 있습니다.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await aiApi.polish(current);
+      if (!r.ok) {
+        alert(`AI 다듬기 실패: ${r.error || "알 수 없는 오류"}`);
+        return;
+      }
+      setMc((prev) => ({ ...prev, [fieldKey]: r.text }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const summarizeToShort = async () => {
+    const src = (mc.full_merit_text || mc.recommendation_reason || "").trim();
+    if (!src) {
+      alert("요약할 공적사항/추천사유가 비어 있습니다.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await aiApi.summarize(src, 50);
+      if (!r.ok) {
+        alert(`AI 요약 실패: ${r.error || "알 수 없는 오류"}`);
+        return;
+      }
+      setMc((prev) => ({ ...prev, merit_short_summary: r.text }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-5 sm:space-y-6">
       <div className="krds-page-header">
@@ -89,6 +142,9 @@ export default function MeritContentEditPage() {
           </Button>
           <Button variant="accent" onClick={onGeneratePdf}>
             저장 + PDF 생성
+          </Button>
+          <Button variant="secondary" onClick={onGenerateHwpx}>
+            📄 HWPX 다운로드
           </Button>
         </div>
       </div>
@@ -136,6 +192,24 @@ export default function MeritContentEditPage() {
               setMc({ ...mc, merit_short_summary: e.target.value })
             }
           />
+          <div className="flex gap-2 mt-1">
+            <button
+              type="button"
+              className="text-xs text-blue-700 underline"
+              onClick={() => polishField("merit_short_summary")}
+              disabled={busy}
+            >
+              ✨ AI 다듬기
+            </button>
+            <button
+              type="button"
+              className="text-xs text-blue-700 underline"
+              onClick={summarizeToShort}
+              disabled={busy}
+            >
+              📝 공적사항에서 50자 요약 생성
+            </button>
+          </div>
         </Field>
 
         <Field label="추천사유">
@@ -146,6 +220,16 @@ export default function MeritContentEditPage() {
               setMc({ ...mc, recommendation_reason: e.target.value })
             }
           />
+          <div className="mt-1">
+            <button
+              type="button"
+              className="text-xs text-blue-700 underline"
+              onClick={() => polishField("recommendation_reason")}
+              disabled={busy}
+            >
+              ✨ AI 다듬기
+            </button>
+          </div>
         </Field>
 
         <div>
@@ -173,6 +257,16 @@ export default function MeritContentEditPage() {
             value={mc.full_merit_text || ""}
             onChange={e => setMc({ ...mc, full_merit_text: e.target.value })}
           />
+          <div className="mt-1">
+            <button
+              type="button"
+              className="text-xs text-blue-700 underline"
+              onClick={() => polishField("full_merit_text")}
+              disabled={busy}
+            >
+              ✨ AI 다듬기 (행정문서 문체로)
+            </button>
+          </div>
         </Field>
 
         <div>

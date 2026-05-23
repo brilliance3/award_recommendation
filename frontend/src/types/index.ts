@@ -26,8 +26,11 @@ export interface Recipient {
   birth_date?: string;
   birth_yymmdd?: string;
   address?: string;
+  registered_address?: string;
   region?: string;
   occupation?: string;
+  nationality?: string;
+  military_id?: string;
   organization_name?: string;
   recipient_position_title?: string;
   external_title?: string;
@@ -88,6 +91,54 @@ export interface GeneratedFileInfo {
 
 export interface GenerateDocumentResponse {
   files: GeneratedFileInfo[];
+}
+
+export interface CouncilCommittee {
+  id: string;
+  code?: string;
+  name: string;
+  short_name?: string;
+  kind?: string;
+  sort_order: number;
+}
+
+export interface CouncilMember {
+  id: string;
+  name: string;
+  chinese_name?: string;
+  english_name?: string;
+  party?: string;
+  district?: string;
+  district_detail?: string;
+  term_count?: number;
+  committee_name?: string;
+  committee_role?: string;
+  council_role?: string;
+  phone?: string;
+  fax?: string;
+  email?: string;
+  office_room?: string;
+  photo_url?: string;
+  blog_url?: string;
+  aide_name?: string;
+  aide_phone?: string;
+  biography?: string;
+  pledges?: string;
+  is_active: boolean;
+}
+
+export interface CouncilMemberRecommender {
+  recommender_full_title: string;
+  recommender_name: string;
+  recommender_department?: string;
+  recommender_position?: string;
+}
+
+export interface AIResponse {
+  ok: boolean;
+  text: string;
+  model?: string;
+  error?: string;
 }
 
 export interface URLExtractResponse {

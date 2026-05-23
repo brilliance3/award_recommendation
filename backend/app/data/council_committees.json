@@ -1,0 +1,15 @@
+[
+  {"code": "C100", "name": "의회운영위원회", "short_name": "운영", "kind": "standing", "sort_order": 1},
+  {"code": "C200", "name": "기획재정위원회", "short_name": "기재", "kind": "standing", "sort_order": 2},
+  {"code": "C300", "name": "경제노동위원회", "short_name": "경노", "kind": "standing", "sort_order": 3},
+  {"code": "C301", "name": "안전행정위원회", "short_name": "안행", "kind": "standing", "sort_order": 4},
+  {"code": "C400", "name": "문화체육관광위원회", "short_name": "문체", "kind": "standing", "sort_order": 5},
+  {"code": "C500", "name": "농정해양위원회", "short_name": "농해", "kind": "standing", "sort_order": 6},
+  {"code": "C600", "name": "보건복지위원회", "short_name": "보복", "kind": "standing", "sort_order": 7},
+  {"code": "C700", "name": "건설교통위원회", "short_name": "건교", "kind": "standing", "sort_order": 8},
+  {"code": "C800", "name": "도시환경위원회", "short_name": "도환", "kind": "standing", "sort_order": 9},
+  {"code": "C850", "name": "미래과학협력위원회", "short_name": "미과", "kind": "standing", "sort_order": 10},
+  {"code": "C900", "name": "여성가족평생교육위원회", "short_name": "여가", "kind": "standing", "sort_order": 11},
+  {"code": "C910", "name": "교육기획위원회", "short_name": "교기", "kind": "standing", "sort_order": 12},
+  {"code": "C920", "name": "교육행정위원회", "short_name": "교행", "kind": "standing", "sort_order": 13}
+]

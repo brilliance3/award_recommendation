@@ -30,6 +30,9 @@ export const generateMerit = (id: string, payload: { keywords: string[]; activit
 export const generatePdf = (id: string) =>
   api.post<GenerateDocumentResponse>(`/api/recipients/${id}/generate-pdf`).then(r => r.data);
 
+export const generateHwpx = (id: string) =>
+  api.post<GenerateDocumentResponse>(`/api/recipients/${id}/generate-hwpx`).then(r => r.data);
+
 export const addCareer = (id: string, payload: Partial<CareerRecord>) =>
   api.post<CareerRecord>(`/api/recipients/${id}/career-records`, payload).then(r => r.data);
 

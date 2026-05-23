@@ -23,6 +23,12 @@ from .documents import (
     URLExtractRequest,
     URLExtractResponse,
 )
+from .council import (
+    CouncilCommitteeRead,
+    CouncilMemberRead,
+    CouncilMemberFullTitle,
+    CouncilMemberRecommender,
+)
 
 __all__ = [
     "AwardCaseCreate",
@@ -44,4 +50,8 @@ __all__ = [
     "GeneratedFileInfo",
     "URLExtractRequest",
     "URLExtractResponse",
+    "CouncilCommitteeRead",
+    "CouncilMemberRead",
+    "CouncilMemberFullTitle",
+    "CouncilMemberRecommender",
 ]

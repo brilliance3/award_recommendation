@@ -16,8 +16,11 @@ class RecipientBase(BaseModel):
     birth_date: Optional[date] = None
     birth_yymmdd: Optional[str] = Field(None, max_length=6)
     address: Optional[str] = None
+    registered_address: Optional[str] = None
     region: Optional[str] = None
     occupation: Optional[str] = None
+    nationality: Optional[str] = "대한민국"
+    military_id: Optional[str] = None
     organization_name: Optional[str] = None
     recipient_position_title: Optional[str] = None
     external_title: Optional[str] = None
@@ -38,8 +41,11 @@ class RecipientUpdate(BaseModel):
     birth_date: Optional[date] = None
     birth_yymmdd: Optional[str] = None
     address: Optional[str] = None
+    registered_address: Optional[str] = None
     region: Optional[str] = None
     occupation: Optional[str] = None
+    nationality: Optional[str] = None
+    military_id: Optional[str] = None
     organization_name: Optional[str] = None
     recipient_position_title: Optional[str] = None
     external_title: Optional[str] = None

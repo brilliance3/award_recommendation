@@ -1,0 +1,139 @@
+[
+  {
+    "name": "김진경", "party": "더불어민주당", "district": "시흥시 제3선거구",
+    "council_role": "의장", "committee_name": null, "term_count": 3
+  },
+  {
+    "name": "정윤경", "party": "더불어민주당", "district": "군포시 제1선거구",
+    "council_role": "부의장", "committee_name": null, "term_count": 3
+  },
+  {
+    "name": "김규창", "party": "국민의힘", "district": "여주시 제2선거구",
+    "council_role": "부의장", "committee_name": null, "term_count": 3
+  },
+
+  {
+    "name": "조성환", "chinese_name": "曺成煥", "party": "더불어민주당",
+    "district": "파주시 제1선거구", "committee_name": "기획재정위원회",
+    "committee_role": "위원장", "term_count": 2
+  },
+  {
+    "name": "이혜원", "party": "국민의힘", "district": "양평군 제1선거구",
+    "committee_name": "기획재정위원회", "committee_role": "부위원장"
+  },
+
+  {
+    "name": "고은정", "chinese_name": "高恩貞", "party": "더불어민주당",
+    "district": "고양시 제10선거구", "committee_name": "경제노동위원회",
+    "committee_role": "위원장"
+  },
+
+  {
+    "name": "임상오", "party": "더불어민주당", "district": "동두천시 제1선거구",
+    "committee_name": "안전행정위원회", "committee_role": "위원장"
+  },
+  {
+    "name": "유경현", "party": "국민의힘", "district": "부천시 제3선거구",
+    "committee_name": "안전행정위원회", "committee_role": "부위원장"
+  },
+  {
+    "name": "강웅철", "chinese_name": "康雄哲", "english_name": "Kang Woong Chul",
+    "party": "국민의힘", "district": "용인시 제8선거구",
+    "district_detail": "수지구 신봉동·동천동·성복동",
+    "term_count": 11, "committee_name": "안전행정위원회",
+    "phone": "031-8008-7775", "fax": "8008-7497",
+    "email": "kwc5432@gmail.com", "office_room": "916호",
+    "photo_url": "https://www.ggc.go.kr/site/main/gwstorage/PhotoPath/kwc5432_org.jpg",
+    "aide_name": "최용재", "aide_phone": "031-8008-7488"
+  },
+
+  {
+    "name": "황대호", "party": "더불어민주당", "district": "수원시 제4선거구",
+    "committee_name": "문화체육관광위원회", "committee_role": "위원장"
+  },
+  {
+    "name": "조미자", "party": "더불어민주당", "district": "남양주시 제2선거구",
+    "committee_name": "문화체육관광위원회", "committee_role": "부위원장"
+  },
+
+  {
+    "name": "방성환", "party": "국민의힘", "district": "성남시 제5선거구",
+    "committee_name": "농정해양위원회", "committee_role": "위원장"
+  },
+  {
+    "name": "김창식", "party": "국민의힘", "district": "남양주시 제7선거구",
+    "committee_name": "농정해양위원회", "committee_role": "부위원장"
+  },
+
+  {
+    "name": "이선구", "party": "더불어민주당", "district": "부천시 제8선거구",
+    "committee_name": "보건복지위원회", "committee_role": "위원장"
+  },
+  {
+    "name": "고준호", "party": "국민의힘", "district": "파주시 제4선거구",
+    "committee_name": "보건복지위원회", "committee_role": "부위원장"
+  },
+
+  {
+    "name": "허원", "party": "국민의힘", "district": "이천시 제2선거구",
+    "committee_name": "건설교통위원회", "committee_role": "위원장"
+  },
+  {
+    "name": "김동영", "party": "더불어민주당", "district": "남양주시 제4선거구",
+    "committee_name": "건설교통위원회", "committee_role": "부위원장"
+  },
+
+  {
+    "name": "김시용", "party": "더불어민주당", "district": "김포시 제2선거구",
+    "committee_name": "도시환경위원회", "committee_role": "위원장"
+  },
+  {
+    "name": "김태희", "party": "더불어민주당", "district": "안산시 제2선거구",
+    "committee_name": "도시환경위원회", "committee_role": "부위원장"
+  },
+
+  {
+    "name": "이제영", "party": "국민의힘", "district": "성남시 제4선거구",
+    "committee_name": "미래과학협력위원회", "committee_role": "위원장"
+  },
+  {
+    "name": "전석훈", "party": "더불어민주당", "district": "성남시 제2선거구",
+    "committee_name": "미래과학협력위원회", "committee_role": "부위원장"
+  },
+
+  {
+    "name": "문형근", "party": "더불어민주당", "district": "안양시 제1선거구",
+    "committee_name": "여성가족평생교육위원회", "committee_role": "위원장"
+  },
+  {
+    "name": "김민호", "party": "국민의힘", "district": "양주시 제2선거구",
+    "committee_name": "여성가족평생교육위원회", "committee_role": "부위원장"
+  },
+
+  {
+    "name": "안광률", "party": "더불어민주당", "district": "시흥시 제4선거구",
+    "committee_name": "교육기획위원회", "committee_role": "위원장"
+  },
+  {
+    "name": "장윤정", "party": "더불어민주당", "district": "안산시 제3선거구",
+    "committee_name": "교육기획위원회", "committee_role": "부위원장"
+  },
+
+  {
+    "name": "이애형", "party": "국민의힘", "district": "수원시 제2선거구",
+    "committee_name": "교육행정위원회", "committee_role": "위원장"
+  },
+  {
+    "name": "장한별", "party": "더불어민주당", "district": "수원시 제7선거구",
+    "committee_name": "교육행정위원회", "committee_role": "부위원장"
+  },
+
+  {
+    "name": "강태형", "chinese_name": "姜汰亨", "english_name": "Kang Tai Hyung",
+    "party": "더불어민주당", "district": "안산시 제5선거구",
+    "district_detail": "단원구 와동·선부3동",
+    "committee_name": "건설교통위원회",
+    "blog_url": "https://blog.naver.com/thkang21c",
+    "photo_url": "https://www.ggc.go.kr/site/main/gwstorage/PhotoPath/kth21cc_org.jpg"
+  }
+]

@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { generateAll, generateXlsx, generateZip, getCase } from "../api";
+import {
+  generateAll,
+  generateHwpx,
+  generateXlsx,
+  generateZip,
+  getCase,
+} from "../api";
 import { absoluteUrl } from "../api/client";
 import type { AwardCaseDetail, GeneratedFileInfo } from "../types";
 import { Button } from "../components/Field";
@@ -44,6 +50,26 @@ export default function DownloadPage() {
     }
   };
 
+  const onGenHwpx = async () => {
+    if (!detail.recipients || detail.recipients.length === 0) {
+      alert("등록된 대상자가 없습니다.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const all: GeneratedFileInfo[] = [];
+      for (const r of detail.recipients) {
+        const resp = await generateHwpx(r.id);
+        all.push(...resp.files);
+      }
+      setFiles((prev) => [...prev, ...all]);
+    } catch (e: any) {
+      alert(`HWPX 생성 실패: ${e?.response?.data?.detail || e?.message || e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div>
       <nav className="text-xs text-ink-500 mb-3" aria-label="이동 경로">
@@ -78,12 +104,15 @@ export default function DownloadPage() {
       <div className="krds-card krds-card-pad space-y-5">
         <div>
           <h2 className="krds-section-title mb-3">생성 옵션</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
             <Button variant="secondary" disabled={busy} onClick={onGenXlsx}>
               01·03 XLSX만 생성
             </Button>
             <Button disabled={busy} onClick={onGenAll}>
-              전체 파일(PDF+XLSX) 생성
+              전체 파일(PDF+XLSX)
+            </Button>
+            <Button variant="secondary" disabled={busy} onClick={onGenHwpx}>
+              📄 HWPX 일괄 생성
             </Button>
             <Button variant="accent" disabled={busy} onClick={onGenZip}>
               ZIP 다운로드 생성
@@ -95,6 +124,9 @@ export default function DownloadPage() {
               ← 대상자 목록
             </Button>
           </div>
+          <p className="text-xs text-ink-500 mt-2">
+            📄 HWPX는 한글(Hancom Office)에서 바로 열어 추가 편집할 수 있는 형식입니다.
+          </p>
         </div>
 
         {files.length > 0 && (
