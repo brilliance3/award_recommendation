@@ -24,12 +24,25 @@ class Recipient(Base):
     chinese_name = Column(String(100))
     birth_date = Column(Date)
     birth_yymmdd = Column(String(6))
+    phone_number = Column(String(30))
     address = Column(String(500))
+    address_zipcode = Column(String(10))
+    registered_address = Column(String(500))
     region = Column(String(100))
     occupation = Column(String(255))
+    nationality = Column(String(50), default="대한민국")
+    military_id = Column(String(50))
     organization_name = Column(String(255))
     recipient_position_title = Column(String(255))
     external_title = Column(String(255))
+
+    # 대상자에게 보낼 공개 입력 링크용 토큰 (랜덤 32자)
+    invitation_token = Column(String(64), unique=True, index=True)
+    # 처리 상태 — "draft" | "submitted" | "approved" | "rejected" | "submitted_by_recipient"
+    status = Column(String(30), default="draft")
+    # 대상자가 직접 입력 완료한 시각 (None = 아직 미입력)
+    invited_at = Column(DateTime)
+    submitted_at = Column(DateTime)
 
     # 공적
     merit_category = Column(String(255))

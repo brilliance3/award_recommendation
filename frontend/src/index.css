@@ -116,4 +116,106 @@
   .krds-link {
     @apply text-brand-600 hover:text-brand-700 hover:underline underline-offset-2 font-medium;
   }
+
+  /* === KRDS 표준 폼 컴포넌트 === */
+  /* 입력 — input/textarea/select 공통 */
+  .krds-input {
+    @apply w-full px-3 py-2 border border-ink-300 rounded-md bg-white
+           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500
+           disabled:bg-ink-50 disabled:text-ink-400
+           placeholder-ink-400 text-ink-900;
+  }
+  .krds-label {
+    @apply block text-sm font-semibold text-ink-800 mb-1.5;
+  }
+  .krds-label-required::after {
+    content: " *";
+    @apply text-danger-500;
+  }
+  .krds-hint {
+    @apply text-xs text-ink-500 mt-1;
+  }
+
+  /* 버튼 (Field.tsx 의 Button과 별도 — 일반 button 태그에 직접 적용 가능) */
+  .krds-btn {
+    @apply inline-flex items-center justify-center gap-1.5 font-semibold
+           rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .krds-btn-md { @apply px-4 py-2 text-sm; }
+  .krds-btn-sm { @apply px-2.5 py-1 text-xs; }
+  .krds-btn-lg { @apply px-6 py-3 text-base; }
+  .krds-btn-primary {
+    @apply bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800 border border-brand-600;
+  }
+  .krds-btn-secondary {
+    @apply bg-white text-brand-700 hover:bg-brand-50 border border-brand-300 active:bg-brand-100;
+  }
+  .krds-btn-accent {
+    @apply bg-accent-500 text-white hover:bg-accent-600 active:bg-accent-700 border border-accent-500;
+  }
+  .krds-btn-ghost {
+    @apply text-ink-700 hover:bg-ink-100 border border-transparent;
+  }
+  .krds-btn-danger {
+    @apply bg-danger-500 text-white hover:bg-danger-600 active:bg-danger-700 border border-danger-500;
+  }
+
+  /* 알림 박스 */
+  .krds-alert {
+    @apply rounded-lg border px-4 py-3 text-sm flex items-start gap-2;
+  }
+  .krds-alert-info {
+    @apply border-brand-200 bg-brand-50 text-brand-800;
+  }
+  .krds-alert-success {
+    @apply border-success-500/40 bg-success-50 text-success-600;
+  }
+  .krds-alert-warn {
+    @apply border-warn-500/40 bg-warn-50 text-warn-600;
+  }
+  .krds-alert-danger {
+    @apply border-danger-500/40 bg-danger-50 text-danger-700;
+  }
+
+  /* 단계 표시 (Stepper) */
+  .krds-stepper {
+    @apply flex items-center gap-2 text-xs text-ink-500 mb-4;
+  }
+  .krds-stepper-item {
+    @apply flex items-center gap-1.5;
+  }
+  .krds-stepper-num {
+    @apply inline-flex items-center justify-center w-5 h-5 rounded-full
+           text-[10px] font-bold bg-ink-200 text-ink-700;
+  }
+  .krds-stepper-num-active {
+    @apply bg-brand-600 text-white;
+  }
+  .krds-stepper-num-done {
+    @apply bg-accent-500 text-white;
+  }
+  .krds-stepper-divider {
+    @apply h-px w-6 bg-ink-200;
+  }
+
+  /* 선택 칩 (네이버 후기 스타일) */
+  .krds-chip {
+    @apply inline-flex items-center px-3 py-1.5 text-sm rounded-full border
+           border-ink-300 bg-white text-ink-700 cursor-pointer transition-colors
+           hover:bg-brand-50 hover:border-brand-400 select-none;
+  }
+  .krds-chip-active {
+    @apply bg-brand-600 text-white border-brand-600 hover:bg-brand-700;
+  }
+
+  /* 상태 뱃지 — 처리 현황 */
+  .krds-status {
+    @apply inline-flex items-center px-2 py-0.5 text-xs font-bold rounded;
+  }
+  .krds-status-draft { @apply bg-ink-100 text-ink-700; }
+  .krds-status-invited { @apply bg-warn-50 text-warn-600 border border-warn-500/30; }
+  .krds-status-submitted { @apply bg-brand-50 text-brand-700 border border-brand-200; }
+  .krds-status-approved { @apply bg-success-50 text-success-600 border border-success-500/30; }
+  .krds-status-rejected { @apply bg-danger-50 text-danger-700 border border-danger-500/30; }
 }

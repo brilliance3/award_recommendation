@@ -15,9 +15,14 @@ class RecipientBase(BaseModel):
     chinese_name: Optional[str] = None
     birth_date: Optional[date] = None
     birth_yymmdd: Optional[str] = Field(None, max_length=6)
+    phone_number: Optional[str] = None
     address: Optional[str] = None
+    address_zipcode: Optional[str] = None
+    registered_address: Optional[str] = None
     region: Optional[str] = None
     occupation: Optional[str] = None
+    nationality: Optional[str] = "대한민국"
+    military_id: Optional[str] = None
     organization_name: Optional[str] = None
     recipient_position_title: Optional[str] = None
     external_title: Optional[str] = None
@@ -25,6 +30,8 @@ class RecipientBase(BaseModel):
     merit_period: Optional[str] = None
     recommendation_rank: Optional[str] = "1순위"
     note: Optional[str] = None
+    status: Optional[str] = "draft"
+    invitation_token: Optional[str] = None
 
 
 class RecipientCreate(RecipientBase):
@@ -37,9 +44,14 @@ class RecipientUpdate(BaseModel):
     chinese_name: Optional[str] = None
     birth_date: Optional[date] = None
     birth_yymmdd: Optional[str] = None
+    phone_number: Optional[str] = None
     address: Optional[str] = None
+    address_zipcode: Optional[str] = None
+    registered_address: Optional[str] = None
     region: Optional[str] = None
     occupation: Optional[str] = None
+    nationality: Optional[str] = None
+    military_id: Optional[str] = None
     organization_name: Optional[str] = None
     recipient_position_title: Optional[str] = None
     external_title: Optional[str] = None
@@ -47,6 +59,7 @@ class RecipientUpdate(BaseModel):
     merit_period: Optional[str] = None
     recommendation_rank: Optional[str] = None
     note: Optional[str] = None
+    status: Optional[str] = None
 
 
 class RecipientRead(RecipientBase):

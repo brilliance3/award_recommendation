@@ -195,14 +195,20 @@
       </tr>
       <tr>
         <td class="label">(3) 군번<br/><span class="small">(군인의 경우)</span></td>
-        <td class="center">-</td>
+        <td class="center">{{ military_id or '-' }}</td>
         <td class="label">(4) 국적<br/><span class="small">(외국인의 경우)</span></td>
-        <td class="center">-</td>
+        <td class="center">{{ nationality or '대한민국' }}</td>
       </tr>
       <tr>
         <td class="label">(5) 주　소</td>
-        <td colspan="3" class="center">{{ address }}</td>
+        <td colspan="3">{{ address }}</td>
       </tr>
+      {% if registered_address %}
+      <tr>
+        <td class="label">등록기준지</td>
+        <td colspan="3">{{ registered_address }}</td>
+      </tr>
+      {% endif %}
       <tr>
         <td class="label">(6) 직　업</td>
         <td class="center">{{ occupation }}</td>

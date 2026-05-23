@@ -4,6 +4,7 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 const nav = [
   { to: "/", label: "대시보드", end: true },
   { to: "/cases/new", label: "새 표창 건" },
+  { to: "/stats", label: "통계 현황" },
 ];
 
 export default function Layout() {

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..config import GENERATED_DIR
 from ..database import get_db
-from ..services import pdf_generator, xlsx_generator, zip_packager
+from ..services import hwpx_generator, pdf_generator, xlsx_generator, zip_packager
 from ..services.url_extractor import extract_from_url
 from .deps import get_case_or_404, get_recipient_or_404
 
@@ -59,6 +59,34 @@ def generate_pdf(recipient_id: str, db: Session = Depends(get_db)):
             )
         ]
     )
+
+
+@router.post(
+    "/api/recipients/{recipient_id}/generate-hwpx",
+    response_model=schemas.GenerateDocumentResponse,
+)
+def generate_hwpx(recipient_id: str, db: Session = Depends(get_db)):
+    """한글(HWPX) 형식으로 공적조서 생성."""
+    r = get_recipient_or_404(db, recipient_id)
+    if not r.award_case:
+        raise HTTPException(status_code=400, detail="표창 건 정보가 없습니다")
+    path = hwpx_generator.generate_hwpx(r.award_case, r)
+    _register_document(db, r.award_case_id, r.id, "merit_report_hwpx", path)
+    return schemas.GenerateDocumentResponse(
+        files=[
+            schemas.GeneratedFileInfo(
+                type="merit_report_hwpx",
+                file_name=path.name,
+                download_url=_download_url(path.name),
+            )
+        ]
+    )
+
+
+@router.get("/api/hwpx/template-status")
+def hwpx_template_status():
+    """HWPX 베이스 템플릿이 배포 환경에 정상 포함되었는지 확인."""
+    return hwpx_generator.ensure_base_template_present()
 
 
 @router.post(
@@ -151,6 +179,8 @@ def download_file(file_name: str):
         media = "application/pdf"
     elif file_name.lower().endswith(".xlsx"):
         media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    elif file_name.lower().endswith(".hwpx"):
+        media = "application/vnd.hancom.hwpx"
     elif file_name.lower().endswith(".zip"):
         media = "application/zip"
     else:

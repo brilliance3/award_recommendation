@@ -1,0 +1,225 @@
+<?xml version='1.0' encoding='UTF-8'?>
+{% macro cell(text="", label=None, w=8504, h=2400, ca=0, ra=0, colSpan=1, rowSpan=1, header=False, justify=False) -%}
+<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="{{ 4 if header else 3 }}">
+  <hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">
+    <hp:p paraPrIDRef="{{ 0 if justify else 21 }}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0" id="20000099{{ '%02d%02d' % (ra, ca) }}">
+      <hp:run charPrIDRef="{{ 8 if header else 0 }}"><hp:t>{{ label if label else text }}</hp:t></hp:run>
+    </hp:p>
+  </hp:subList>
+  <hp:cellAddr colAddr="{{ ca }}" rowAddr="{{ ra }}"/>
+  <hp:cellSpan colSpan="{{ colSpan }}" rowSpan="{{ rowSpan }}"/>
+  <hp:cellSz width="{{ w }}" height="{{ h }}"/>
+  <hp:cellMargin left="141" right="141" top="141" bottom="141"/>
+</hp:tc>
+{%- endmacro %}
+<hs:sec xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" xmlns:hp10="http://www.hancom.co.kr/hwpml/2016/paragraph" xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core" xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head" xmlns:hhs="http://www.hancom.co.kr/hwpml/2011/history" xmlns:hm="http://www.hancom.co.kr/hwpml/2011/master-page" xmlns:hpf="http://www.hancom.co.kr/schema/2011/hpf" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf/" xmlns:ooxmlchart="http://www.hancom.co.kr/hwpml/2016/ooxmlchart" xmlns:hwpunitchar="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar" xmlns:epub="http://www.idpf.org/2007/ops" xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0">
+  {# secPr 포함 첫 문단 - base/section0.xml 동일 #}
+  <hp:p id="2000000001" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0">
+      <hp:secPr id="" textDirection="HORIZONTAL" spaceColumns="1134" tabStop="8000" tabStopVal="4000" tabStopUnit="HWPUNIT" outlineShapeIDRef="1" memoShapeIDRef="0" textVerticalWidthHead="0" masterPageCnt="0">
+        <hp:grid lineGrid="0" charGrid="0" wonggojiFormat="0"/>
+        <hp:startNum pageStartsOn="BOTH" page="0" pic="0" tbl="0" equation="0"/>
+        <hp:visibility hideFirstHeader="0" hideFirstFooter="0" hideFirstMasterPage="0" border="SHOW_ALL" fill="SHOW_ALL" hideFirstPageNum="0" hideFirstEmptyLine="0" showLineNumber="0"/>
+        <hp:lineNumberShape restartType="0" countBy="0" distance="0" startNumber="0"/>
+        <hp:pagePr landscape="WIDELY" width="59528" height="84186" gutterType="LEFT_ONLY">
+          <hp:margin header="4252" footer="4252" gutter="0" left="8504" right="8504" top="5668" bottom="4252"/>
+        </hp:pagePr>
+        <hp:footNotePr>
+          <hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" suffixChar=")" supscript="0"/>
+          <hp:noteLine length="-1" type="SOLID" width="0.12 mm" color="#000000"/>
+          <hp:noteSpacing betweenNotes="283" belowLine="567" aboveLine="850"/>
+          <hp:numbering type="CONTINUOUS" newNum="1"/>
+          <hp:placement place="EACH_COLUMN" beneathText="0"/>
+        </hp:footNotePr>
+        <hp:endNotePr>
+          <hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" suffixChar=")" supscript="0"/>
+          <hp:noteLine length="14692344" type="SOLID" width="0.12 mm" color="#000000"/>
+          <hp:noteSpacing betweenNotes="0" belowLine="567" aboveLine="850"/>
+          <hp:numbering type="CONTINUOUS" newNum="1"/>
+          <hp:placement place="END_OF_DOCUMENT" beneathText="0"/>
+        </hp:endNotePr>
+        <hp:pageBorderFill type="BOTH" borderFillIDRef="1" textBorder="PAPER" headerInside="0" footerInside="0" fillArea="PAPER">
+          <hp:offset left="1417" right="1417" top="1417" bottom="1417"/>
+        </hp:pageBorderFill>
+        <hp:pageBorderFill type="EVEN" borderFillIDRef="1" textBorder="PAPER" headerInside="0" footerInside="0" fillArea="PAPER">
+          <hp:offset left="1417" right="1417" top="1417" bottom="1417"/>
+        </hp:pageBorderFill>
+        <hp:pageBorderFill type="ODD" borderFillIDRef="1" textBorder="PAPER" headerInside="0" footerInside="0" fillArea="PAPER">
+          <hp:offset left="1417" right="1417" top="1417" bottom="1417"/>
+        </hp:pageBorderFill>
+      </hp:secPr>
+      <hp:ctrl>
+        <hp:colPr id="" type="NEWSPAPER" layout="LEFT" colCount="1" sameSz="1" sameGap="0"/>
+      </hp:ctrl>
+    </hp:run>
+    <hp:run charPrIDRef="0"><hp:t/></hp:run>
+  </hp:p>
+
+  {# === 제목: 공 적 조 서 === #}
+  <hp:p id="2000000010" paraPrIDRef="20" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="7"><hp:t>공 　 적 　 조 　 서</hp:t></hp:run>
+  </hp:p>
+  <hp:p id="2000000011" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0"><hp:t/></hp:run>
+  </hp:p>
+
+  {# === 인적사항 표 (4열, 라벨/값/라벨/값) === #}
+  {# 본문폭 42520 HWPUNIT, 라벨 8504 (1) + 값 12756 (1.5) + 라벨 8504 (1) + 값 12756 (1.5) = 42520 #}
+  <hp:p id="2000000020" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0">
+      <hp:tbl id="2000000100" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="0" rowCnt="9" colCnt="4" cellSpacing="0" borderFillIDRef="3" noAdjust="0">
+        <hp:sz width="42520" widthRelTo="ABSOLUTE" height="21600" heightRelTo="ABSOLUTE" protect="0"/>
+        <hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>
+        <hp:outMargin left="0" right="0" top="0" bottom="0"/>
+        <hp:inMargin left="141" right="141" top="141" bottom="141"/>
+
+        {# 1행: (1) 성명 / 값 / (한자) / 한자값 #}
+        <hp:tr>
+          {{ cell(label="(1) 성　명", w=8504, h=2400, ca=0, ra=0, header=True) }}
+          {{ cell(text=recipient_name, w=12756, h=2400, ca=1, ra=0) }}
+          {{ cell(label="(한 자)", w=8504, h=2400, ca=2, ra=0, header=True) }}
+          {{ cell(text=chinese_name, w=12756, h=2400, ca=3, ra=0) }}
+        </hp:tr>
+
+        {# 2행: (2) 생년월일 / 값 (3 colSpan) #}
+        <hp:tr>
+          {{ cell(label="(2) 생년월일", w=8504, h=2400, ca=0, ra=1, header=True) }}
+          {{ cell(text=birth_date, w=34016, h=2400, ca=1, ra=1, colSpan=3) }}
+        </hp:tr>
+
+        {# 3행: (3) 군번 / 값 / (4) 국적 / 값 #}
+        <hp:tr>
+          {{ cell(label="(3) 군번", w=8504, h=2400, ca=0, ra=2, header=True) }}
+          {{ cell(text=military_id, w=12756, h=2400, ca=1, ra=2) }}
+          {{ cell(label="(4) 국적", w=8504, h=2400, ca=2, ra=2, header=True) }}
+          {{ cell(text=nationality, w=12756, h=2400, ca=3, ra=2) }}
+        </hp:tr>
+
+        {# 4행: (5) 주소 / 값 (3 colSpan) #}
+        <hp:tr>
+          {{ cell(label="(5) 주　소", w=8504, h=2400, ca=0, ra=3, header=True) }}
+          {{ cell(text=address, w=34016, h=2400, ca=1, ra=3, colSpan=3) }}
+        </hp:tr>
+
+        {# 5행: (6) 직업 / 값 / (7) 소속 / 값 #}
+        <hp:tr>
+          {{ cell(label="(6) 직　업", w=8504, h=2400, ca=0, ra=4, header=True) }}
+          {{ cell(text=occupation, w=12756, h=2400, ca=1, ra=4) }}
+          {{ cell(label="(7) 소　속", w=8504, h=2400, ca=2, ra=4, header=True) }}
+          {{ cell(text=organization_name, w=12756, h=2400, ca=3, ra=4) }}
+        </hp:tr>
+
+        {# 6행: (8) 직급 / 값 / (9) 직위 / 값 #}
+        <hp:tr>
+          {{ cell(label="(8) 직　급", w=8504, h=2400, ca=0, ra=5, header=True) }}
+          {{ cell(text=rank_field, w=12756, h=2400, ca=1, ra=5) }}
+          {{ cell(label="(9) 직　위", w=8504, h=2400, ca=2, ra=5, header=True) }}
+          {{ cell(text=recipient_position_title, w=12756, h=2400, ca=3, ra=5) }}
+        </hp:tr>
+
+        {# 7행: (10) 대외직명 / 값 (3 colSpan) #}
+        <hp:tr>
+          {{ cell(label="(10) 대외직명", w=8504, h=2400, ca=0, ra=6, header=True) }}
+          {{ cell(text=external_title, w=34016, h=2400, ca=1, ra=6, colSpan=3) }}
+        </hp:tr>
+
+        {# 8행: (11) 공적기간 / 값 / (12) 공적분야 / 값 #}
+        <hp:tr>
+          {{ cell(label="(11) 공적기간", w=8504, h=2400, ca=0, ra=7, header=True) }}
+          {{ cell(text=merit_period, w=12756, h=2400, ca=1, ra=7) }}
+          {{ cell(label="(12) 공적분야", w=8504, h=2400, ca=2, ra=7, header=True) }}
+          {{ cell(text=merit_category, w=12756, h=2400, ca=3, ra=7) }}
+        </hp:tr>
+
+        {# 9행: (14) 추천훈격 / 값 / (15) 추천순위 / 값 #}
+        <hp:tr>
+          {{ cell(label="(14) 추천훈격", w=8504, h=2400, ca=0, ra=8, header=True) }}
+          {{ cell(text=award_grade, w=12756, h=2400, ca=1, ra=8) }}
+          {{ cell(label="(15) 추천순위", w=8504, h=2400, ca=2, ra=8, header=True) }}
+          {{ cell(text=recommendation_rank, w=12756, h=2400, ca=3, ra=8) }}
+        </hp:tr>
+      </hp:tbl>
+    </hp:run>
+  </hp:p>
+
+  {# === (13) 공적요지 표 (1열) === #}
+  <hp:p id="2000000200" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="8"><hp:t>(13) 공적요지 (50자 내외)</hp:t></hp:run>
+  </hp:p>
+  <hp:p id="2000000201" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0">
+      <hp:tbl id="2000000210" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="0" rowCnt="1" colCnt="1" cellSpacing="0" borderFillIDRef="3" noAdjust="0">
+        <hp:sz width="42520" widthRelTo="ABSOLUTE" height="6000" heightRelTo="ABSOLUTE" protect="0"/>
+        <hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>
+        <hp:outMargin left="0" right="0" top="0" bottom="0"/>
+        <hp:inMargin left="283" right="283" top="283" bottom="283"/>
+        <hp:tr>
+          {{ cell(text=merit_short_summary, w=42520, h=6000, ca=0, ra=0, justify=True) }}
+        </hp:tr>
+      </hp:tbl>
+    </hp:run>
+  </hp:p>
+
+  {# === 조사자 표 === #}
+  <hp:p id="2000000300" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="8"><hp:t>조 　 사 　 자</hp:t></hp:run>
+  </hp:p>
+  <hp:p id="2000000301" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0">
+      <hp:tbl id="2000000310" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="0" rowCnt="2" colCnt="4" cellSpacing="0" borderFillIDRef="3" noAdjust="0">
+        <hp:sz width="42520" widthRelTo="ABSOLUTE" height="4800" heightRelTo="ABSOLUTE" protect="0"/>
+        <hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>
+        <hp:outMargin left="0" right="0" top="0" bottom="0"/>
+        <hp:inMargin left="141" right="141" top="141" bottom="141"/>
+        <hp:tr>
+          {{ cell(label="(16) 소　속", w=8504, h=2400, ca=0, ra=0, header=True) }}
+          {{ cell(text=investigator_department, w=12756, h=2400, ca=1, ra=0) }}
+          {{ cell(label="(17) 직　위", w=8504, h=2400, ca=2, ra=0, header=True) }}
+          {{ cell(text=investigator_position, w=12756, h=2400, ca=3, ra=0) }}
+        </hp:tr>
+        <hp:tr>
+          {{ cell(label="(18) 직　급", w=8504, h=2400, ca=0, ra=1, header=True) }}
+          {{ cell(text=investigator_rank, w=12756, h=2400, ca=1, ra=1) }}
+          {{ cell(label="(19) 성　명", w=8504, h=2400, ca=2, ra=1, header=True) }}
+          {{ cell(text=investigator_name ~ " (인)", w=12756, h=2400, ca=3, ra=1) }}
+        </hp:tr>
+      </hp:tbl>
+    </hp:run>
+  </hp:p>
+
+  <hp:p id="2000000400" paraPrIDRef="20" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0"><hp:t>위 기록이 틀림없음을 확인합니다.</hp:t></hp:run>
+  </hp:p>
+  <hp:p id="2000000401" paraPrIDRef="20" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0"><hp:t>{{ recommendation_date }}</hp:t></hp:run>
+  </hp:p>
+  <hp:p id="2000000402" paraPrIDRef="20" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="9"><hp:t>추 천 관 　 {{ recommender_full_title }} {{ recommender_name }} (인)</hp:t></hp:run>
+  </hp:p>
+
+  {# === 페이지 브레이크 후 공적사항 === #}
+  <hp:p id="2000000500" paraPrIDRef="0" styleIDRef="0" pageBreak="1" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0"><hp:t/></hp:run>
+  </hp:p>
+  <hp:p id="2000000501" paraPrIDRef="20" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="9"><hp:t>(27) 공 　 적 　 사 　 항</hp:t></hp:run>
+  </hp:p>
+  <hp:p id="2000000502" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0"><hp:t/></hp:run>
+  </hp:p>
+  {% for line in merit_lines %}
+  <hp:p id="20000005{{ '%03d' % (10 + loop.index) }}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0"><hp:t>{{ line }}</hp:t></hp:run>
+  </hp:p>
+  {% endfor %}
+
+  <hp:p id="2000000700" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0"><hp:t/></hp:run>
+  </hp:p>
+  <hp:p id="2000000701" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="8"><hp:t>■ 추천사유</hp:t></hp:run>
+  </hp:p>
+  <hp:p id="2000000702" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0"><hp:t>{{ recommendation_reason }}</hp:t></hp:run>
+  </hp:p>
+</hs:sec>

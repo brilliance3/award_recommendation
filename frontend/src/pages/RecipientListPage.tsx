@@ -1,14 +1,33 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { deleteRecipient, getCase, importXlsx } from "../api";
+import { deleteRecipient, getCase, importXlsx, inviteApi } from "../api";
 import type { AwardCaseDetail } from "../types";
 import { Button } from "../components/Field";
+import ShareLinksModal from "../components/ShareLinksModal";
 
 export default function RecipientListPage() {
   const { caseId = "" } = useParams();
   const [detail, setDetail] = useState<AwardCaseDetail | null>(null);
+  const [q, setQ] = useState("");
+  const [showShare, setShowShare] = useState(false);
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const issueInvite = async (rid: string, name: string) => {
+    try {
+      const r = await inviteApi.issue(rid);
+      const url = `${window.location.origin}${r.public_url}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        alert(`✓ ${name} 입력 링크가 복사되었습니다.\n\n${url}`);
+      } catch {
+        prompt("아래 링크를 복사해서 대상자에게 전달하세요:", url);
+      }
+      load();
+    } catch (e: any) {
+      alert("발급 실패: " + (e?.response?.data?.detail || e?.message));
+    }
+  };
 
   const load = () => getCase(caseId).then(setDetail);
   useEffect(() => {
@@ -16,6 +35,16 @@ export default function RecipientListPage() {
   }, [caseId]);
 
   if (!detail) return <div className="text-ink-500">불러오는 중...</div>;
+
+  const filteredRecipients = (() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return detail.recipients;
+    return detail.recipients.filter((r) =>
+      [r.recipient_name, r.organization_name, r.recipient_position_title, r.merit_category, r.address]
+        .filter(Boolean)
+        .some((v) => v!.toLowerCase().includes(term))
+    );
+  })();
 
   const onDelete = async (id: string) => {
     if (!confirm("이 대상자와 관련 문서를 삭제합니다. 계속할까요?")) return;
@@ -73,6 +102,13 @@ export default function RecipientListPage() {
             ＋ 대상자 추가
           </Button>
           <Button
+            variant="secondary"
+            onClick={() => setShowShare(true)}
+            title="모든 대상자에게 입력 링크 일괄 발급/공유"
+          >
+            🔗 공유
+          </Button>
+          <Button
             variant="accent"
             onClick={() => navigate(`/cases/${caseId}/download`)}
           >
@@ -80,6 +116,21 @@ export default function RecipientListPage() {
           </Button>
         </div>
       </div>
+
+      {/* 검색 박스 — 5명 이상이면 노출 */}
+      {detail.recipients.length >= 5 && (
+        <div className="krds-card krds-card-pad mb-4 flex flex-col sm:flex-row items-center gap-2">
+          <input
+            className="krds-input flex-1"
+            placeholder="🔍 이름/소속/직위/공적분야/주소로 검색"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <span className="text-xs text-ink-500 whitespace-nowrap">
+            {filteredRecipients.length} / {detail.recipients.length} 명
+          </span>
+        </div>
+      )}
 
       {/* 데스크탑/태블릿 — 표 */}
       <div className="hidden md:block krds-card overflow-hidden">
@@ -97,14 +148,16 @@ export default function RecipientListPage() {
               </tr>
             </thead>
             <tbody>
-              {detail.recipients.length === 0 ? (
+              {filteredRecipients.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="text-center text-ink-500 py-8">
-                    대상자가 없습니다. 우측 상단에서 추가하거나 XLSX를 업로드하세요.
+                    {detail.recipients.length === 0
+                      ? "대상자가 없습니다. 우측 상단에서 추가하거나 XLSX를 업로드하세요."
+                      : "검색 결과가 없습니다."}
                   </td>
                 </tr>
               ) : (
-                detail.recipients.map(r => (
+                filteredRecipients.map(r => (
                   <tr key={r.id}>
                     <td className="text-center text-ink-500">
                       {r.sequence_no}
@@ -113,13 +166,31 @@ export default function RecipientListPage() {
                       <Link className="krds-link" to={`/recipients/${r.id}`}>
                         {r.recipient_name}
                       </Link>
+                      {(r as any).status === "submitted_by_recipient" && (
+                        <span className="ml-2 krds-status krds-status-submitted">
+                          ✓ 제출
+                        </span>
+                      )}
+                      {(r as any).status === "invited" && (
+                        <span className="ml-2 krds-status krds-status-invited">
+                          ⌛ 작성중
+                        </span>
+                      )}
                     </td>
                     <td>{r.birth_date || "-"}</td>
                     <td>{r.organization_name || "-"}</td>
                     <td>{r.recipient_position_title || "-"}</td>
                     <td>{r.merit_category || "-"}</td>
                     <td className="text-right">
-                      <div className="inline-flex gap-1.5">
+                      <div className="inline-flex gap-1.5 flex-wrap">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => issueInvite(r.id, r.recipient_name)}
+                          title="대상자 본인 입력 링크 발급+복사"
+                        >
+                          🔗 링크
+                        </Button>
                         <Button
                           size="sm"
                           variant="secondary"
@@ -157,12 +228,14 @@ export default function RecipientListPage() {
 
       {/* 모바일 — 카드 리스트 */}
       <div className="md:hidden space-y-3">
-        {detail.recipients.length === 0 ? (
+        {filteredRecipients.length === 0 ? (
           <div className="krds-card krds-card-pad text-center text-ink-500">
-            대상자가 없습니다. 상단 버튼에서 추가하세요.
+            {detail.recipients.length === 0
+              ? "대상자가 없습니다. 상단 버튼에서 추가하세요."
+              : "검색 결과가 없습니다."}
           </div>
         ) : (
-          detail.recipients.map(r => (
+          filteredRecipients.map(r => (
             <div key={r.id} className="krds-card krds-card-pad">
               <div className="flex items-center justify-between gap-2">
                 <Link
@@ -218,6 +291,17 @@ export default function RecipientListPage() {
           ))
         )}
       </div>
+
+      {showShare && (
+        <ShareLinksModal
+          caseId={caseId}
+          caseTitle={detail.title}
+          onClose={() => {
+            setShowShare(false);
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }

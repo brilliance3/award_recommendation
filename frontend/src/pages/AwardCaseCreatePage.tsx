@@ -1,25 +1,51 @@
 import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createCase } from "../api";
+import { councilApi, createCase } from "../api";
 import Field, { Button, Input } from "../components/Field";
+import CouncilMemberPicker from "../components/CouncilMemberPicker";
+import type { CouncilMember } from "../types";
 
 export default function AwardCaseCreatePage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     title: "",
     award_grade: "경기도의회 의장 표창",
-    recommender_department: "보건복지위원회",
+    recommender_department: "",
     recommender_position: "의원",
     recommender_name: "",
-    recommender_full_title: "경기도의회 보건복지위원회 의원",
+    recommender_full_title: "경기도의회 의원",
     recommendation_date: "",
     award_date: "",
   });
   const [submitting, setSubmitting] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<CouncilMember | null>(
+    null
+  );
 
-  const setField = (k: keyof typeof form) =>
+  const setField =
+    (k: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm({ ...form, [k]: e.target.value });
+
+  const onPickMember = async (m: CouncilMember) => {
+    setSelectedMember(m);
+    setPickerOpen(false);
+    try {
+      const recommender = await councilApi.recommenderForMember(m.id);
+      setForm((prev) => ({
+        ...prev,
+        recommender_name: recommender.recommender_name,
+        recommender_full_title: recommender.recommender_full_title,
+        recommender_department:
+          recommender.recommender_department || prev.recommender_department,
+        recommender_position:
+          recommender.recommender_position || prev.recommender_position,
+      }));
+    } catch (e) {
+      console.warn("recommender autofill failed", e);
+    }
+  };
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -77,6 +103,42 @@ export default function AwardCaseCreatePage() {
           <Input value={form.award_grade} onChange={setField("award_grade")} />
         </Field>
 
+        {/* 의원 빠른 선택 */}
+        <div className="border border-blue-200 rounded p-3 bg-blue-50/40">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-medium text-blue-900">
+              경기도의회 의원 빠른 선택
+            </span>
+            <button
+              type="button"
+              onClick={() => setPickerOpen(!pickerOpen)}
+              className="text-sm text-blue-700 underline"
+            >
+              {pickerOpen ? "닫기" : "의원 찾기"}
+            </button>
+          </div>
+          {selectedMember && (
+            <div className="text-sm text-ink-700 mb-2">
+              ✅ <strong>{selectedMember.name}</strong> 의원 ·{" "}
+              {selectedMember.party} · {selectedMember.district}
+              {selectedMember.committee_name &&
+                ` · ${selectedMember.committee_name}`}
+            </div>
+          )}
+          {pickerOpen && (
+            <CouncilMemberPicker
+              onSelect={onPickMember}
+              placeholder="이름 또는 지역구 검색"
+            />
+          )}
+          {!pickerOpen && !selectedMember && (
+            <p className="text-xs text-ink-500">
+              위 "의원 찾기"를 눌러 의원을 선택하면 추천자 정보가 자동
+              채워집니다.
+            </p>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <Field label="추천기관 부서">
             <Input
@@ -100,7 +162,7 @@ export default function AwardCaseCreatePage() {
 
         <Field
           label="추천관 전체 명칭"
-          hint="예: 경기도의회 보건복지위원회 의원"
+          hint="예: 경기도의회 의원 / 보건복지위원회"
         >
           <Input
             value={form.recommender_full_title}

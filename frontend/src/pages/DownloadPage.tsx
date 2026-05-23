@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { generateAll, generateXlsx, generateZip, getCase } from "../api";
+import {
+  bulkApi,
+  generateAll,
+  generateHwpx,
+  generateXlsx,
+  generateZip,
+  getCase,
+} from "../api";
 import { absoluteUrl } from "../api/client";
 import type { AwardCaseDetail, GeneratedFileInfo } from "../types";
 import { Button } from "../components/Field";
@@ -44,6 +51,40 @@ export default function DownloadPage() {
     }
   };
 
+  const onBulkAI = async () => {
+    if (!confirm(`${detail.recipient_count}명의 대상자에게 일괄 AI 초안을 생성합니다.\n기존 본문이 있는 대상자는 자동으로 건너뜁니다. 계속할까요?`))
+      return;
+    setBusy(true);
+    try {
+      const r = await bulkApi.aiMerit(caseId, { keywords: ["봉사", "헌신", "지역사회 화합"] });
+      alert(`완료\n  총 ${r.total}명\n  생성: ${r.success}명\n  건너뜀: ${r.skipped}명\n  실패: ${r.failed}명`);
+    } catch (e: any) {
+      alert(`일괄 AI 실패: ${e?.response?.data?.detail || e?.message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onGenHwpx = async () => {
+    if (!detail.recipients || detail.recipients.length === 0) {
+      alert("등록된 대상자가 없습니다.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const all: GeneratedFileInfo[] = [];
+      for (const r of detail.recipients) {
+        const resp = await generateHwpx(r.id);
+        all.push(...resp.files);
+      }
+      setFiles((prev) => [...prev, ...all]);
+    } catch (e: any) {
+      alert(`HWPX 생성 실패: ${e?.response?.data?.detail || e?.message || e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div>
       <nav className="text-xs text-ink-500 mb-3" aria-label="이동 경로">
@@ -78,15 +119,21 @@ export default function DownloadPage() {
       <div className="krds-card krds-card-pad space-y-5">
         <div>
           <h2 className="krds-section-title mb-3">생성 옵션</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <Button variant="secondary" disabled={busy} onClick={onBulkAI}>
+              ✨ AI 일괄 초안
+            </Button>
             <Button variant="secondary" disabled={busy} onClick={onGenXlsx}>
-              01·03 XLSX만 생성
+              01·03 XLSX
             </Button>
             <Button disabled={busy} onClick={onGenAll}>
-              전체 파일(PDF+XLSX) 생성
+              전체 (PDF+XLSX)
+            </Button>
+            <Button variant="secondary" disabled={busy} onClick={onGenHwpx}>
+              📄 HWPX 일괄
             </Button>
             <Button variant="accent" disabled={busy} onClick={onGenZip}>
-              ZIP 다운로드 생성
+              ZIP 다운로드
             </Button>
             <Button
               variant="ghost"
@@ -95,6 +142,9 @@ export default function DownloadPage() {
               ← 대상자 목록
             </Button>
           </div>
+          <p className="text-xs text-ink-500 mt-2">
+            📄 HWPX는 한글(Hancom Office)에서 바로 열어 추가 편집할 수 있는 형식입니다.
+          </p>
         </div>
 
         {files.length > 0 && (
