@@ -1,16 +1,34 @@
 # Playwright 공식 이미지 (Chromium 사전 설치) → PDF 엔진은 playwright 사용
 FROM mcr.microsoft.com/playwright/python:v1.47.0-jammy
 
-# 한글 폰트 (Noto Sans CJK / 나눔)
+# 한글 폰트 (Noto Sans CJK / 나눔) + LibreOffice (공적조서 HWPX→PDF 변환용)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto-cjk fonts-nanum \
+    libreoffice-writer libreoffice-calc curl \
     && rm -rf /var/lib/apt/lists/*
+
+# H2Orestart — LibreOffice용 HWP/HWPX import 필터.
+# 이게 있어야 soffice 가 .hwpx 를 열어 PDF 로 변환한다(공적조서 미리보기/제출).
+RUN curl -fsSL -o /tmp/H2Orestart.oxt \
+      https://github.com/ebandal/H2Orestart/releases/download/v0.7.12/H2Orestart.oxt \
+    && unopkg add --shared /tmp/H2Orestart.oxt \
+    && rm -f /tmp/H2Orestart.oxt
 
 WORKDIR /app
 COPY requirements.txt .
 # pip install 한 뒤 해당 playwright 버전에 맞는 chromium 을 다시 받아 버전 미스매치 방지
 RUN pip install --no-cache-dir -r requirements.txt && \
     playwright install chromium
+
+# 02 공적조서 미리보기는 rhwp(@rhwp/core WASM)로 렌더해 한컴 한글과 동일한 페이지
+# 분할을 재현한다. playwright 베이스 이미지에 Node가 포함되어 있어 npm 설치만 추가.
+COPY render ./render
+RUN cd render && npm install --omit=dev --no-audit --no-fund
+# 미리보기 글꼴 일치: 경기천년체를 시스템 폰트로 설치(chromium이 SVG의 경기천년바탕을
+# fallback 명조가 아니라 실제 글꼴로 렌더하도록). 로컬(맥)은 설치된 시스템 폰트를 쓴다.
+RUN mkdir -p /usr/share/fonts/gyeonggi \
+    && cp render/fonts/*.otf /usr/share/fonts/gyeonggi/ \
+    && fc-cache -f
 
 COPY app ./app
 RUN mkdir -p /app/storage/generated /app/storage/uploads

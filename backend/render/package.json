@@ -1,0 +1,10 @@
+{
+  "name": "award-rhwp-render",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "HWPX→SVG 렌더 (한글 호환 미리보기용). @rhwp/core WASM 사용.",
+  "dependencies": {
+    "@rhwp/core": "0.7.13"
+  }
+}
