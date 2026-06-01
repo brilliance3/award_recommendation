@@ -5,9 +5,10 @@ import Field, { Button, Input } from "../components/Field";
 
 export default function AwardCaseCreatePage() {
   const navigate = useNavigate();
+  const AWARD_GRADE_FIXED = "경기도의회 의장 표창";
   const [form, setForm] = useState({
     title: "",
-    award_grade: "경기도의회 의장 표창",
+    award_grade: AWARD_GRADE_FIXED,
     recommender_department: "보건복지위원회",
     recommender_position: "의원",
     recommender_name: "",
@@ -73,8 +74,8 @@ export default function AwardCaseCreatePage() {
             placeholder="예: 2025년 의장 표창 추천"
           />
         </Field>
-        <Field label="훈격" required>
-          <Input value={form.award_grade} onChange={setField("award_grade")} />
+        <Field label="추천훈격" required hint="의장 표창으로 고정">
+          <Input value={form.award_grade} readOnly disabled />
         </Field>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">

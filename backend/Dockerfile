@@ -36,6 +36,10 @@ RUN mkdir -p /usr/share/fonts/gyeonggi \
     && fc-cache -f
 
 COPY app ./app
+# 빌드된 프론트(frontend/dist → backend/frontend_dist)를 함께 담아 백엔드가 SPA를 서빙.
+# 회사 인트라넷이 vercel.app은 막고 fly.dev는 통과시키므로 단일 도메인(fly.dev)으로 제공.
+# (deploy.sh 가 배포 전 프론트를 상대경로로 빌드해 frontend_dist 에 복사한다.)
+COPY frontend_dist ./frontend_dist
 RUN mkdir -p /app/storage/generated /app/storage/uploads
 
 ENV PDF_ENGINE=playwright \

@@ -76,8 +76,38 @@ def _award_grade_short(award_grade: str) -> str:
     return g
 
 
-def build_context(case: AwardCase, recipient: Recipient) -> dict:
-    """공적조서 PDF용 Jinja 컨텍스트 구성"""
+def _preview_font_face_css() -> str:
+    """경기천년체 OTF를 base64 @font-face로 임베드한 CSS (pdf_preview와 공유).
+    HTML→PDF 변환(weasyprint/playwright)은 외부 URL 접근이 보장되지 않아 base64로 임베드한다."""
+    from .pdf_preview import _font_face_css
+    return _font_face_css()
+
+
+def _font_face_css_url(base: str = "/api/fonts") -> str:
+    """경기천년체를 /api/fonts 정적 URL로 참조하는 @font-face CSS.
+
+    base64 임베드(12MB+)와 달리 미리보기 HTML 자체는 가볍고, 브라우저가 폰트를 캐시해
+    페이지를 넘길 때마다 재다운로드하지 않는다(미리보기 속도 개선)."""
+    from urllib.parse import quote
+
+    faces = [
+        ("경기천년바탕", "normal", "경기천년바탕OTF_Regular.otf"),
+        ("경기천년바탕", "bold", "경기천년바탕OTF_Bold.otf"),
+        ("경기천년제목", "normal", "경기천년제목OTF_Medium.otf"),
+        ("경기천년제목", "bold", "경기천년제목OTF_Bold.otf"),
+    ]
+    return "".join(
+        f"@font-face{{font-family:'{family}';font-weight:{weight};"
+        f"src:url('{base}/{quote(fname)}') format('opentype');}}"
+        for family, weight, fname in faces
+    )
+
+
+def build_context(
+    case: AwardCase, recipient: Recipient, font_css: str = None, investigator: dict = None
+) -> dict:
+    """공적조서 PDF용 Jinja 컨텍스트 구성. font_css=None이면 미리보기용 URL 폰트 CSS 사용.
+    investigator(설정 조사자)가 주어지면 조사자 항목을 실제 다운로드 문서와 동일하게 덮어쓴다."""
     mc = recipient.merit_content
     inv_dept = (mc.investigator_department if mc and mc.investigator_department else DEFAULT_INVESTIGATOR["department"])
     inv_pos = (mc.investigator_position if mc and mc.investigator_position else DEFAULT_INVESTIGATOR["position"])
@@ -112,6 +142,7 @@ def build_context(case: AwardCase, recipient: Recipient) -> dict:
         "birth_date": _fmt_date_dot(recipient.birth_date),
         "address": recipient.address or "",
         "occupation": recipient.occupation or "",
+        "gender": getattr(recipient, "gender", "") or "",
         "organization_name": recipient.organization_name or "",
         "recipient_position_title": recipient.recipient_position_title or "",
         "external_title": recipient.external_title or "",
@@ -137,26 +168,43 @@ def build_context(case: AwardCase, recipient: Recipient) -> dict:
         # 경력/표창
         "career_pairs": _pair_two(recipient.career_records or []),
         "award_pairs": _pair_two(recipient.previous_awards or []),
+
+        # 경기천년체 @font-face: 미리보기는 URL 참조(가벼움·캐시), PDF 생성은 base64 임베드
+        "font_face_css": font_css if font_css is not None else _font_face_css_url(),
     }
+    if investigator:
+        for key, ctx_key in (
+            ("department", "investigator_department"),
+            ("position", "investigator_position"),
+            ("rank", "investigator_rank"),
+            ("name", "investigator_name"),
+        ):
+            if investigator.get(key):
+                ctx[ctx_key] = investigator[key]
     return ctx
 
 
-def render_html(case: AwardCase, recipient: Recipient) -> str:
+def render_html(case: AwardCase, recipient: Recipient, investigator: dict = None) -> str:
+    """HTML→PDF 생성용 — 폰트를 base64로 임베드해 외부 의존 없이 렌더."""
     template = _env.get_template("merit_report.html")
-    return template.render(**build_context(case, recipient))
+    return template.render(
+        **build_context(
+            case, recipient, font_css=_preview_font_face_css(), investigator=investigator
+        )
+    )
 
 
 class PDFEngineUnavailable(RuntimeError):
     """PDF 엔진을 사용할 수 없을 때."""
 
 
-def generate_pdf(case: AwardCase, recipient: Recipient) -> Path:
+def generate_pdf(case: AwardCase, recipient: Recipient, investigator: dict = None) -> Path:
     """공적조서 PDF 생성 → 파일 경로 반환.
 
     설정된 엔진 시도 → 실패하면 다른 엔진으로 자동 폴백.
     둘 다 없으면 명확한 안내 메시지로 PDFEngineUnavailable 발생.
     """
-    html = render_html(case, recipient)
+    html = render_html(case, recipient, investigator=investigator)
     file_name = f"02. 공적조서({recipient.recipient_name}).pdf"
     file_path = GENERATED_DIR / file_name
 
@@ -231,6 +279,11 @@ def _render_with_playwright(html: str, file_path: Path) -> None:
         raise RuntimeError(f"playwright 렌더링 실패: {e}") from e
 
 
-def render_html_for_preview(case: AwardCase, recipient: Recipient) -> str:
-    """미리보기용 HTML 직접 반환 (PDF로 변환하지 않음)"""
-    return render_html(case, recipient)
+def render_html_for_preview(
+    case: AwardCase, recipient: Recipient, investigator: dict = None
+) -> str:
+    """화면 미리보기용 HTML 직접 반환 (PDF로 변환하지 않음).
+    폰트는 /api/fonts URL로 참조해 HTML을 가볍게 유지하고 브라우저가 폰트를 캐시한다.
+    investigator(설정 조사자)가 주어지면 실제 다운로드 문서와 동일한 조사자로 표시한다."""
+    template = _env.get_template("merit_report.html")
+    return template.render(**build_context(case, recipient, investigator=investigator))

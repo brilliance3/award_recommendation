@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from .recipient import RecipientRead
+from .recipient import RecipientDetail, RecipientRead
 
 
 class AwardCaseBase(BaseModel):
@@ -16,6 +16,14 @@ class AwardCaseBase(BaseModel):
     recommender_full_title: Optional[str] = None
     recommendation_date: Optional[date] = None
     award_date: Optional[date] = None
+    applicant_role: Optional[str] = None
+    applicant_name: Optional[str] = None
+    applicant_organization: Optional[str] = None
+    applicant_contact: Optional[str] = None
+    applicant_delivery_address: Optional[str] = None
+    status: Optional[str] = None
+    seal_applied: bool = False
+    chair_sign: bool = False
 
 
 class AwardCaseCreate(AwardCaseBase):
@@ -31,6 +39,14 @@ class AwardCaseUpdate(BaseModel):
     recommender_full_title: Optional[str] = None
     recommendation_date: Optional[date] = None
     award_date: Optional[date] = None
+    applicant_role: Optional[str] = None
+    applicant_name: Optional[str] = None
+    applicant_organization: Optional[str] = None
+    applicant_contact: Optional[str] = None
+    applicant_delivery_address: Optional[str] = None
+    status: Optional[str] = None
+    seal_applied: Optional[bool] = None
+    chair_sign: Optional[bool] = None
 
 
 class AwardCaseRead(AwardCaseBase):
@@ -44,3 +60,9 @@ class AwardCaseRead(AwardCaseBase):
 
 class AwardCaseDetail(AwardCaseRead):
     recipients: List[RecipientRead] = []
+
+
+class AwardCasePreview(AwardCaseRead):
+    """문서 미리보기용 — 각 recipient의 본문·경력·과거표창까지 포함."""
+
+    recipients: List[RecipientDetail] = []

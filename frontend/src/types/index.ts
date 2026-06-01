@@ -1,3 +1,5 @@
+import type { ChecklistRead } from "../api/checklist";
+
 export interface AwardCase {
   id: string;
   title: string;
@@ -8,6 +10,14 @@ export interface AwardCase {
   recommender_full_title?: string;
   recommendation_date?: string;
   award_date?: string;
+  applicant_role?: "individual" | "organization" | string;
+  applicant_name?: string;
+  applicant_organization?: string;
+  applicant_contact?: string;
+  applicant_delivery_address?: string;
+  status?: string;
+  seal_applied?: boolean;
+  chair_sign?: boolean;
   created_at: string;
   updated_at: string;
   recipient_count: number;
@@ -15,6 +25,10 @@ export interface AwardCase {
 
 export interface AwardCaseDetail extends AwardCase {
   recipients: Recipient[];
+}
+
+export interface AwardCasePreview extends AwardCase {
+  recipients: RecipientDetail[];
 }
 
 export interface Recipient {
@@ -25,12 +39,14 @@ export interface Recipient {
   chinese_name?: string;
   birth_date?: string;
   birth_yymmdd?: string;
+  gender?: string;
   address?: string;
   region?: string;
   occupation?: string;
   organization_name?: string;
   recipient_position_title?: string;
   external_title?: string;
+  rank_grade?: string;
   merit_category?: string;
   merit_period?: string;
   recommendation_rank?: string;
@@ -41,6 +57,7 @@ export interface Recipient {
 
 export interface RecipientDetail extends Recipient {
   merit_content?: MeritContent | null;
+  checklist?: ChecklistRead | null;
   career_records: CareerRecord[];
   previous_awards: PreviousAward[];
 }

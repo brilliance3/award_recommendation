@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { deleteRecipient, getCase, importXlsx } from "../api";
+import { deleteRecipient, getCase, importXlsx, updateCase } from "../api";
 import type { AwardCaseDetail } from "../types";
-import { Button } from "../components/Field";
+import { Button, Input } from "../components/Field";
 
 export default function RecipientListPage() {
   const { caseId = "" } = useParams();
@@ -10,12 +10,83 @@ export default function RecipientListPage() {
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // 표창건명 인라인 편집
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [savingTitle, setSavingTitle] = useState(false);
+
+  // 표창일 인라인 편집
+  const [editingAwardDate, setEditingAwardDate] = useState(false);
+  const [awardDateDraft, setAwardDateDraft] = useState("");
+  const [savingAwardDate, setSavingAwardDate] = useState(false);
+
   const load = () => getCase(caseId).then(setDetail);
   useEffect(() => {
     load();
   }, [caseId]);
 
   if (!detail) return <div className="text-ink-500">불러오는 중...</div>;
+
+  const startEditTitle = () => {
+    setTitleDraft(detail.title);
+    setEditingTitle(true);
+  };
+  const cancelEditTitle = () => {
+    setEditingTitle(false);
+    setTitleDraft("");
+  };
+  const saveTitle = async () => {
+    const t = titleDraft.trim();
+    if (!t) {
+      alert("표창건명을 입력해 주세요.");
+      return;
+    }
+    if (t === detail.title) {
+      setEditingTitle(false);
+      return;
+    }
+    setSavingTitle(true);
+    try {
+      await updateCase(caseId, { title: t });
+      await load();
+      setEditingTitle(false);
+    } catch (err: any) {
+      alert(
+        "건명 저장에 실패했습니다.\n" +
+          (err?.response?.data?.detail || err?.message || "")
+      );
+    } finally {
+      setSavingTitle(false);
+    }
+  };
+
+  const startEditAwardDate = () => {
+    setAwardDateDraft(detail.award_date || "");
+    setEditingAwardDate(true);
+  };
+  const cancelEditAwardDate = () => {
+    setEditingAwardDate(false);
+    setAwardDateDraft("");
+  };
+  const saveAwardDate = async () => {
+    if (awardDateDraft === (detail.award_date || "")) {
+      setEditingAwardDate(false);
+      return;
+    }
+    setSavingAwardDate(true);
+    try {
+      await updateCase(caseId, { award_date: awardDateDraft || undefined });
+      await load();
+      setEditingAwardDate(false);
+    } catch (err: any) {
+      alert(
+        "표창일 저장에 실패했습니다.\n" +
+          (err?.response?.data?.detail || err?.message || "")
+      );
+    } finally {
+      setSavingAwardDate(false);
+    }
+  };
 
   const onDelete = async (id: string) => {
     if (!confirm("이 대상자와 관련 문서를 삭제합니다. 계속할까요?")) return;
@@ -43,15 +114,106 @@ export default function RecipientListPage() {
       </nav>
 
       <div className="krds-page-header">
-        <div className="min-w-0">
-          <h1 className="krds-page-title break-keep">{detail.title}</h1>
-          <div className="krds-page-sub flex flex-wrap items-center gap-1.5">
+        <div className="min-w-0 flex-1">
+          {editingTitle ? (
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <Input
+                value={titleDraft}
+                onChange={e => setTitleDraft(e.target.value)}
+                placeholder="예) 홍길동 의장표창 추천 / 경기복지재단 표창 추천"
+                autoFocus
+                className="sm:flex-1"
+                onKeyDown={e => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    saveTitle();
+                  } else if (e.key === "Escape") {
+                    cancelEditTitle();
+                  }
+                }}
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={saveTitle}
+                  disabled={savingTitle}
+                >
+                  {savingTitle ? "저장 중..." : "저장"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={cancelEditTitle}
+                >
+                  취소
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <h1 className="krds-page-title break-keep">{detail.title}</h1>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={startEditTitle}
+                title="표창건명 수정"
+              >
+                ✎ 건명 수정
+              </Button>
+            </div>
+          )}
+          <div className="krds-page-sub flex flex-wrap items-center gap-1.5 mt-1.5">
             <span className="krds-badge krds-badge-brand">
               {detail.award_grade}
             </span>
             <span>
               {detail.recommender_full_title} {detail.recommender_name}
             </span>
+            <span className="text-ink-300">·</span>
+            {editingAwardDate ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Input
+                  type="date"
+                  value={awardDateDraft}
+                  onChange={e => setAwardDateDraft(e.target.value)}
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      saveAwardDate();
+                    } else if (e.key === "Escape") {
+                      cancelEditAwardDate();
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  onClick={saveAwardDate}
+                  disabled={savingAwardDate}
+                >
+                  {savingAwardDate ? "저장 중..." : "저장"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={cancelEditAwardDate}
+                >
+                  취소
+                </Button>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <span>표창일 {detail.award_date || "미정"}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={startEditAwardDate}
+                  title="표창일 수정"
+                >
+                  ✎
+                </Button>
+              </span>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -80,6 +242,48 @@ export default function RecipientListPage() {
           </Button>
         </div>
       </div>
+
+      {/* 신청자 정보 (민간인 /apply 신청 건만 표시) */}
+      {detail.applicant_name && (
+        <div className="krds-card krds-card-pad mb-4 border-ink-200">
+          <h2 className="text-sm font-bold text-ink-800 mb-2">
+            신청자 정보 (민간인 신청)
+          </h2>
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+            <div className="flex gap-2">
+              <dt className="text-ink-500 shrink-0 w-20">신청자</dt>
+              <dd className="text-ink-800">
+                {detail.applicant_name}
+                {detail.applicant_role === "organization" && (
+                  <span className="ml-1 text-xs text-ink-500">
+                    (기관 대표)
+                  </span>
+                )}
+              </dd>
+            </div>
+            {detail.applicant_organization && (
+              <div className="flex gap-2">
+                <dt className="text-ink-500 shrink-0 w-20">기관·단체</dt>
+                <dd className="text-ink-800">{detail.applicant_organization}</dd>
+              </div>
+            )}
+            {detail.applicant_contact && (
+              <div className="flex gap-2">
+                <dt className="text-ink-500 shrink-0 w-20">연락처</dt>
+                <dd className="text-ink-800">{detail.applicant_contact}</dd>
+              </div>
+            )}
+            {detail.applicant_delivery_address && (
+              <div className="flex gap-2 sm:col-span-2">
+                <dt className="text-ink-500 shrink-0 w-20">등기수령</dt>
+                <dd className="text-ink-800 break-all">
+                  {detail.applicant_delivery_address}
+                </dd>
+              </div>
+            )}
+          </dl>
+        </div>
+      )}
 
       {/* 데스크탑/태블릿 — 표 */}
       <div className="hidden md:block krds-card overflow-hidden">
@@ -137,6 +341,14 @@ export default function RecipientListPage() {
                           }
                         >
                           미리보기
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            navigate(`/recipients/${r.id}/admin-review`)
+                          }
+                        >
+                          검토
                         </Button>
                         <Button
                           size="sm"
@@ -205,6 +417,12 @@ export default function RecipientListPage() {
                   onClick={() => navigate(`/recipients/${r.id}/preview`)}
                 >
                   미리보기
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => navigate(`/recipients/${r.id}/admin-review`)}
+                >
+                  검토
                 </Button>
                 <Button
                   size="sm"

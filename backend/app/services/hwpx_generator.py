@@ -70,6 +70,18 @@ def _set_first_text(cell, text: str) -> None:
         t.text = text if i == 0 else ""
 
 
+def _collapse_to_first_paragraph(cell) -> None:
+    """셀의 첫 문단만 남기고 나머지(양식 여분 빈 문단)를 제거.
+    일부 값 셀(예: 조사자 소속)이 양식에 빈 문단을 포함해, _set_first_text로 값을
+    채운 뒤에도 빈 줄(엔터)이 남는 것을 정리한다."""
+    sub = cell.find("hp:subList", NS)
+    if sub is None:
+        return
+    ps = sub.findall("hp:p", NS)
+    for p in ps[1:]:
+        sub.remove(p)
+
+
 def _set_two_texts(cell, t1: str, t2: str) -> None:
     ts = _cell_texts(cell)
     if ts:
@@ -198,23 +210,54 @@ def generate_merit_overview_hwpx(case: AwardCase) -> Path:
 
 
 def _normalize_header_fonts(header_bytes: bytes) -> bytes:
-    """header.xml의 폰트 face를 경기천년체로 정규화.
+    """header.xml의 폰트 테이블을 경기천년체 2개로 깨끗하게 재구성한다.
 
-    LibreOffice/H2Orestart는 ' Regular'/' Bold' 등 스타일 접미사가 붙은 face
-    (예: '경기천년바탕 Regular')를 못 찾아 나눔고딕으로 대체한다. 굵기는 charPr의
-    bold 속성으로 유지되므로, 모든 face를 스타일 없는 경기천년 패밀리로 바꾼다.
-    - 제목 계열 → '경기천년제목', 그 외 → '경기천년바탕'.
+    배경: 양식 템플릿은 언어블록당 7~8개 폰트(경기천년바탕·제목 + 굴림체/함초롬/한컴바탕
+    등)를 갖고, 본문 텍스트는 함초롬돋움 등을 참조한다. 과거엔 정규식으로 모든 face를
+    경기천년으로 바꿨는데, 그러면 '경기천년바탕 TTF' face가 6개 중복된다.
+    - macOS 한컴은 관대해서 중복이 있어도 경기천년으로 렌더한다.
+    - **그러나 Windows 한컴은 동일 face 이름이 여러 개면 폰트 매핑에 실패→경기천년
+      미표시(시스템 기본 폴백)** 한다. (사용자 실제 환경=Windows. 정상 샘플은 폰트가
+      3개로 깔끔해 Windows에서도 정상.)
+
+    그래서 폰트 테이블을 정상 샘플처럼 깨끗한 2개로 재구성한다:
+      id0=경기천년바탕(TTF, substFont 함초롬돋움), id1=경기천년제목(TTF, substFont 함초롬돋움).
+    그리고 charPr의 fontRef를 재매핑한다: 원본 id1(경기천년제목)→1, 그 외 모든 id→0.
+    (템플릿은 모든 언어블록에서 id0=경기천년바탕, id1=경기천년제목으로 일관됨.)
+    substFont는 경기천년이 아닌 한컴 기본 글꼴(함초롬돋움)로 둬, 경기천년이 없는 환경에서도
+    시스템 기본이 아니라 함초롬돋움으로 안전하게 폴백되게 한다.
     """
-    import re
-
-    txt = header_bytes.decode("utf-8")
-
-    def repl(m: "re.Match") -> str:
-        face = m.group(1)
-        new = "경기천년제목" if "경기천년제목" in face else "경기천년바탕"
-        return f'face="{new}"'
-
-    txt = re.sub(r'face="([^"]*)"', repl, txt)
+    HH = "{http://www.hancom.co.kr/hwpml/2011/head}"
+    root = etree.fromstring(header_bytes)
+    # 템플릿 폰트 테이블은 언어블록당 7~8개 폰트(경기천년바탕·제목 + 굴림체/함초롬 등)이고
+    # id0=경기천년바탕, id1=경기천년제목으로 일관된다. 이를 전부 경기천년으로 바꾸면
+    # '경기천년바탕 TTF'가 6개 중복되어 한컴이 폰트 매핑에 실패→경기천년 미표시 폴백한다.
+    # 그래서 폰트 테이블을 깨끗한 2개(0=바탕, 1=제목)로 재구성하고 charPr 참조를 재매핑한다.
+    # 재매핑: 원본 id1(경기천년제목)→1, 그 외 모든 id→0(경기천년바탕).
+    for cp in root.iter(HH + "charPr"):
+        fr = cp.find(HH + "fontRef")
+        if fr is None:
+            continue
+        for attr in ("hangul", "latin", "hanja", "japanese", "other", "symbol", "user"):
+            v = fr.get(attr)
+            if v is not None:
+                fr.set(attr, "1" if v == "1" else "0")
+    for ff in root.iter(HH + "fontface"):
+        for f in list(ff.findall(HH + "font")):
+            ff.remove(f)
+        for fid, face in (("0", "경기천년바탕"), ("1", "경기천년제목")):
+            font = etree.SubElement(ff, HH + "font")
+            font.set("id", fid)
+            font.set("face", face)
+            font.set("type", "TTF")
+            font.set("isEmbedded", "0")
+            sub = etree.SubElement(font, HH + "substFont")
+            sub.set("face", "함초롬돋움")
+            sub.set("type", "TTF")
+            sub.set("isEmbedded", "0")
+            sub.set("binaryItemIDRef", "")
+        ff.set("fontCnt", "2")
+    txt = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True).decode("utf-8")
     # 빨강(성품 강조)·파랑(본문표·공적요지·경력·공적사항 등 양식 sample) 글자색을 검정으로 통일
     for color in ("#FF0000", "#0000FF", "#2E74B5"):
         txt = txt.replace(color, "#000000")
@@ -469,6 +512,7 @@ def _save_hwpx(
     spacing_para_ids: set = None,
     apply_report_layout: bool = False,
     report_fix: bool = False,
+    merit_detail_charprs: set = None,
 ) -> None:
     """원본 zip을 그대로 복사하되 Contents/section0.xml만 교체.
     mimetype은 STORED(비압축)로 저장하여 OWPML 규약을 유지.
@@ -497,10 +541,23 @@ def _save_hwpx(
                         data = _finalize_header_layout(data)
                     if report_fix:
                         data = _fix_report_header(data)
+                    if merit_detail_charprs:
+                        data = _set_charpr_height(data, merit_detail_charprs, 1300)
                 if item.filename == "mimetype":
                     zout.writestr(item, data, compress_type=zipfile.ZIP_STORED)
                 else:
                     zout.writestr(item, data, compress_type=zipfile.ZIP_DEFLATED)
+
+
+def _set_charpr_height(header_bytes: bytes, charpr_ids: set, height: int) -> bytes:
+    """지정 charPr들의 글자 크기(height)를 변경. (29)공적사항 셀 전체 13pt 고정용."""
+    HH = "{http://www.hancom.co.kr/hwpml/2011/head}"
+    root = etree.fromstring(header_bytes)
+    ids = {str(i) for i in charpr_ids}
+    for cp in root.iter(HH + "charPr"):
+        if cp.get("id") in ids:
+            cp.set("height", str(height))
+    return etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
 
 
 # === 02. 공적조서 (Merit Report) ===
@@ -601,7 +658,7 @@ def generate_merit_report_hwpx(
         rec_full_base = rec_full_base.rstrip()[: -len(rec_name)].rstrip()
     confirm_date = _fmt_dot_date(case.created_at)
     survey_date = _fmt_korean_date(case.seal_applied_at)
-    body_date = _fmt_korean_date(case.created_at)  # 본문표 위기록 확인 날짜 = 작성/제출일
+    body_date = _fmt_korean_date(case.seal_applied_at)  # 본문표 추천관(인) 확인 날짜 = 도장일
     award_date_short = _fmt_award_date_short(case.award_date)
     signoff = (
         f"추 천 관    {rec_full_base}   {rec_name}    (인)"
@@ -635,12 +692,14 @@ def generate_merit_report_hwpx(
     )
     _fill_career_table(tables[2].findall(".//hp:tc", NS), recipients[0])
     _fill_survey_paragraphs(root, recipients[0], investigator)
-    # 추천사유 (페이지1) — 첫 대상자
+    # 추천사유 (페이지1) — 첫 대상자.
+    # 템플릿 placeholder는 "○ 추천사유" 단락 다음의 "-" 단락(root 직속)이다.
+    # 그 "-" 단락을 "- {추천사유}" 로 채운다. (과거 "- 상기인은" prefix 매칭은
+    # 새 양식의 placeholder가 "-"뿐이라 실패했음.)
     mc0 = recipients[0].merit_content
     reason0 = (mc0.recommendation_reason if mc0 else "") or ""
-    _replace_paragraph_starting_with(
-        root, "- 상기인은", f"- {reason0}" if reason0 else "- 상기인은", keep_lead=False
-    )
+    if reason0:
+        _fill_paragraph_after(root, "○ 추천사유", f"- {reason0}")
     # 페이지1 확인일
     _replace_paragraph_starting_with(root, "2026.   .", confirm_date)
 
@@ -669,7 +728,10 @@ def generate_merit_report_hwpx(
     _fill_report_dates(root, body_date, survey_date)
     # --- 경력표(공적사항 포함, 32셀)은 셀이 페이지를 넘어가도록 pageBreak=CELL ---
     # 또한 공적사항 셀(마지막 행)이 짧아도 페이지 한 쪽을 채우도록 최소 높이를 늘린다.
-    PAGE_BODY_HEIGHT = 74266  # 본문 높이(페이지 84186 - 상단 5668 - 하단 4252 여백)
+    # 경력표가 채울 수 있는 한컴 한글 실제 가용 본문 높이(표 상단~본문 하단).
+    # hwp-mcp 렌더 실측값 ≈ 68598 HWPUNIT. 여백 계산값(84186-5668-4252=74266)보다
+    # 약 5668 작은 것은 표 시작 오프셋·셀 여백 때문이다. 이 실측값을 채움 기준으로 쓴다.
+    PAGE_BODY_HEIGHT = 68598
 
     def _row_height(row):
         hs = [
@@ -686,13 +748,16 @@ def generate_merit_report_hwpx(
     #  - 짧은 공적사항: 셀 최소 높이를 페이지 잔여로 설정해 페이지를 채운다.
     #  - 긴 공적사항: 셀이 내용 따라 늘어 pageBreak=CELL 로 다음 페이지로 이어지며,
     #    repeatHeader + (29)제목행 header=1 로 (29)제목을 반복한다.
-    HP = "{http://www.hancom.co.kr/hwpml/2011/paragraph}"
-    LINE_H = 1700        # 공적사항 줄당 렌더 높이(실측 기준, 줄간격 포함)
-    CHARS_PER_LINE = 33  # 공적사항 셀 줄당 글자 수(실측 기준)
-    SAFETY = 2800        # 페이지 잔여보다 약간 작게(넘침 방지)
+    SAFETY = 1500        # 렌더 엔진 간 미세 오차 버퍼(가용높이보다 약간 작게, 약 20px)
     for tbl in root.findall(".//hp:tbl", NS):
         if len(tbl.findall(".//hp:tc", NS)) != 32:
             continue
+        # 주요경력 표는 공적조서 본문과 분리해 새 페이지에서 시작
+        _tp = tbl.getparent()
+        while _tp is not None and etree.QName(_tp.tag).localname != "p":
+            _tp = _tp.getparent()
+        if _tp is not None:
+            _tp.set("pageBreak", "1")
         tbl.set("pageBreak", "CELL")
         pos = tbl.find("hp:pos", NS)
         if pos is not None:
@@ -704,54 +769,10 @@ def generate_merit_report_hwpx(
             tc.set("header", "1")  # (29)제목행을 표 제목줄로 → 페이지마다 반복
         other = sum(_row_height(r) for r in rows[:-1])
         fill = max(0, PAGE_BODY_HEIGHT - other - SAFETY)
-        merit_cell = rows[-1].find("hp:tc", NS)
         for cl in rows[-1].findall("hp:tc", NS):
             sz = cl.find("hp:cellSz", NS)
             if sz is not None:
                 sz.set("height", str(max(int(sz.get("height") or 0), fill)))
-        # 빈 줄 패딩 — soffice 미리보기/서버 PDF에서 짧은 공적사항도 페이지를 채운다.
-        # (한글은 cellSz 높이를 존중하므로 패딩이 없어도 채워지지만, soffice는 텍스트
-        #  셀의 cellSz를 무시하므로 패딩이 필요하다. treatAsChar=0 이라 패딩이 과해도
-        #  밀림 없이 다음 페이지로 분할된다.)
-        if merit_cell is not None:
-            sub = merit_cell.find("hp:subList", NS)
-            ps = sub.findall("hp:p", NS) if sub is not None else []
-            if ps:
-                ref = ps[0]
-                para_pr = ref.get("paraPrIDRef") or "0"
-                run = ref.find("hp:run", NS)
-                char_pr = run.get("charPrIDRef") if run is not None else "0"
-                cellw = int(merit_cell.find("hp:cellSz", NS).get("width") or 0)
-                horz = max(0, cellw - 282)
-                text = "".join(t.text or "" for t in merit_cell.iter(HP + "t"))
-                text_lines = sum(
-                    max(1, -(-len(s) // CHARS_PER_LINE)) for s in text.split("\n")
-                ) or 1
-                pad = max(0, fill // LINE_H - text_lines)
-                for i in range(pad):
-                    np_ = etree.SubElement(sub, HP + "p")
-                    np_.set("id", "0")
-                    np_.set("paraPrIDRef", para_pr)
-                    np_.set("styleIDRef", "0")
-                    np_.set("pageBreak", "0")
-                    np_.set("columnBreak", "0")
-                    np_.set("merged", "0")
-                    nr = etree.SubElement(np_, HP + "run")
-                    nr.set("charPrIDRef", char_pr)
-                    lsa = etree.SubElement(np_, HP + "linesegarray")
-                    ls = etree.SubElement(lsa, HP + "lineseg")
-                    for k, v in (
-                        ("textpos", "0"),
-                        ("vertpos", str(LINE_H * (i + 1))),
-                        ("vertsize", "1300"),
-                        ("textheight", "1300"),
-                        ("baseline", "1105"),
-                        ("spacing", "780"),
-                        ("horzpos", "0"),
-                        ("horzsize", str(horz)),
-                        ("flags", "393216"),
-                    ):
-                        ls.set(k, v)
     # --- 현지조사 확인서([서식3])는 새 페이지에서 시작 ---
     P_TAG = "{http://www.hancom.co.kr/hwpml/2011/paragraph}p"
     for p in root.iter(P_TAG):
@@ -802,8 +823,27 @@ def generate_merit_report_hwpx(
                 root.remove(nxt)
                 removed += 1
             nxt = after
+    # --- 현지조사확인서 한 장 구성: 길면 빈 줄을 줄여 한 페이지에 맞춤(명세14) ---
+    _fit_survey_to_one_page(root)
     # --- 정렬 ---
     _apply_paragraph_alignments(root)
+
+    # --- (11)대외직명 각주 삭제 (표와 겹쳐 보임 — PDF미리보기/HWPX 모두 반영) ---
+    _remove_external_title_footnote(root)
+
+    # --- (29)공적사항 셀 글자 13pt 고정용 charPr id 수집 ---
+    merit_detail_charprs = set()
+    for _tbl in root.findall(".//hp:tbl", NS):
+        _tcs = _tbl.findall("hp:tr/hp:tc", NS) or _tbl.findall(".//hp:tc", NS)
+        if len(_tcs) == 32:
+            for _run in _tcs[31].findall(".//hp:run", NS):
+                _cid = _run.get("charPrIDRef")
+                if _cid:
+                    merit_detail_charprs.add(_cid)
+            # 13pt로 키운 만큼 양식의 줄 위치 캐시(linesegarray, 작은 글자 기준)를 제거해
+            # 렌더 엔진이 13pt 기준으로 줄을 다시 계산하게 한다(글자 겹침 방지)
+            for _lsa in _tcs[31].findall(".//hp:linesegarray", NS):
+                _lsa.getparent().remove(_lsa)
 
     # --- 저장 ---
     new_section = etree.tostring(
@@ -822,7 +862,10 @@ def generate_merit_report_hwpx(
         spacing_para_ids=body_para_ids,
         apply_report_layout=False,
         report_fix=True,
+        merit_detail_charprs=merit_detail_charprs,
     )
+    # [하네스] 명세 불변 규칙 검증 — 위반 시 생성 중단
+    _assert_merit_report_invariants(out_path, recipients, award_grade, investigator)
     return out_path
 
 
@@ -831,6 +874,127 @@ def _recommender_line(rec_full_base: str, rec_name: str) -> str:
     if rec_full_base:
         return f"추천(의뢰)자 : {rec_full_base}   {rec_name}    (인)"
     return f"추천(의뢰)자 : {rec_name}    (인)"
+
+
+def _assert_merit_report_invariants(out_path, recipients, award_grade, inv) -> None:
+    """[하네스] 공적조서 HWPX가 명세 불변 규칙을 지키는지 생성 직후 검증.
+    위반 시 RuntimeError로 생성을 중단해, 잘못된 문서가 만들어지지 않게 한다.
+
+    검증:
+    - 폰트: 본문 글꼴이 전부 경기천년체(경기천년바탕/제목)
+    - 작성자 입력: (1)성명·(6)주소·(7)직업·(8)소속이 해당 셀에 정확히 들어감
+    - 조사자: (17)소속=설정 부서명, (20)성명=조사자 이름
+    """
+    import re
+
+    with zipfile.ZipFile(out_path) as z:
+        header = z.read("Contents/header.xml").decode("utf-8")
+        root = etree.fromstring(z.read("Contents/section0.xml"))
+    # 1) 폰트 하네스 — 주 폰트(font face)가 전부 경기천년인지 검증.
+    #    substFont(대체 글꼴=함초롬돋움/명조)는 한컴 폴백용이라 검사에서 제외한다.
+    HH = "{http://www.hancom.co.kr/hwpml/2011/head}"
+    hroot = etree.fromstring(header.encode("utf-8"))
+    primary_faces = {
+        f.get("face") for f in hroot.iter(HH + "font") if f.get("face")
+    }
+    bad = sorted(f for f in primary_faces if "경기천년" not in f)
+    if bad:
+        raise RuntimeError(f"[하네스] 비경기천년체 폰트 발견: {bad}")
+    # substFont(대체 글꼴)가 경기천년으로 오염되면 한컴에서 경기천년 미표시 폴백이
+    # 재발하므로, 대체 글꼴은 반드시 경기천년이 아니어야 한다(한컴 기본 글꼴 유지).
+    polluted = sorted(
+        s.get("face")
+        for s in hroot.iter(HH + "substFont")
+        if s.get("face") and "경기천년" in s.get("face")
+    )
+    if polluted:
+        raise RuntimeError(f"[하네스] substFont가 경기천년으로 오염됨(폴백 깨짐): {polluted}")
+    # 2) 본문표(44셀)에서 첫 대상자 입력 검증
+    body = next(
+        (t for t in root.findall(".//hp:tbl", NS) if len(t.findall(".//hp:tc", NS)) == 44),
+        None,
+    )
+    if body is None:
+        raise RuntimeError("[하네스] 공적조서 본문표(44셀)를 찾지 못함")
+    cells = body.findall("hp:tr/hp:tc", NS) or body.findall(".//hp:tc", NS)
+
+    def _ct(i):
+        return "".join(t.text or "" for t in cells[i].findall(".//hp:t", NS)).strip()
+
+    r0 = recipients[0]
+    checks = [
+        (1, r0.recipient_name, "(1)성명"),
+        (12, r0.address, "(6)주소"),
+        (14, r0.occupation, "(7)직업"),
+        (16, r0.organization_name, "(8)소속"),
+    ]
+    if inv:
+        checks.append((35, inv.get("department"), "(17)조사자 소속"))
+        if inv.get("name"):
+            checks.append((41, inv.get("name"), "(20)조사자 성명"))
+    for i, expected, label in checks:
+        exp = (expected or "").strip()
+        if exp and exp not in _ct(i):
+            raise RuntimeError(
+                f"[하네스] {label} 입력 누락/불일치: 기대 '{exp}' 실제 '{_ct(i)}'"
+            )
+    # 3) (29)공적사항 셀 전체 글자 13pt 고정 검증
+    HH = "{http://www.hancom.co.kr/hwpml/2011/head}"
+    hdr_root = etree.fromstring(header.encode("utf-8"))
+    career = next(
+        (t for t in root.findall(".//hp:tbl", NS) if len(t.findall(".//hp:tc", NS)) == 32),
+        None,
+    )
+    if career is not None:
+        ccells = career.findall("hp:tr/hp:tc", NS) or career.findall(".//hp:tc", NS)
+        detail_ids = {
+            r.get("charPrIDRef")
+            for r in ccells[31].findall(".//hp:run", NS)
+            if r.get("charPrIDRef")
+        }
+        for cp in hdr_root.iter(HH + "charPr"):
+            if cp.get("id") in detail_ids and cp.get("height") != "1300":
+                raise RuntimeError(
+                    f"[하네스] (29)공적사항 13pt 위반: charPr {cp.get('id')} "
+                    f"height={cp.get('height')}"
+                )
+    # 4) 현지조사확인서 인적사항 검증 (명세 12) — 작성자 입력 그대로
+    P_TAG = "{http://www.hancom.co.kr/hwpml/2011/paragraph}p"
+
+    def _para_nospace_start(prefix_ns):
+        for p in root.iter(P_TAG):
+            txt = "".join(t.text or "" for t in p.findall(".//hp:t", NS))
+            if txt.replace(" ", "").startswith(prefix_ns):
+                return txt
+        return ""
+
+    for prefix_ns, expected, label in [
+        ("○성명", r0.recipient_name, "현지조사 성명"),
+        ("○직업", r0.occupation, "현지조사 직업"),
+        ("○주소", r0.address, "현지조사 주소"),
+    ]:
+        exp = (expected or "").strip()
+        if exp and exp not in _para_nospace_start(prefix_ns):
+            raise RuntimeError(f"[하네스] {label} 입력 누락: 기대 '{exp}'")
+
+
+def _remove_external_title_footnote(root) -> None:
+    """(11)대외직명 각주('* 대외직명란에는 … 표창장에 표시할 내용')를 제거.
+    표와 겹쳐 보여 삭제 요청됨. 표 셀의 '(11)대외직명*' 라벨은 보존한다."""
+    keys = ("대외직명란에는", "운영지침(인혁처예규)", "기관별 대외직명을 표시")
+    # 1) 표를 포함하지 않은 순수 각주 문단 제거
+    for p in list(root):
+        if etree.QName(p.tag).localname != "p":
+            continue
+        if p.findall(".//hp:tbl", NS):
+            continue
+        txt = "".join(t.text or "" for t in p.findall(".//hp:t", NS))
+        if any(k in txt for k in keys):
+            root.remove(p)
+    # 2) 표 문단에 섞인 각주 텍스트는 해당 hp:t만 비움(표/라벨 구조는 유지)
+    for t in root.iter(f"{{{NS['hp']}}}t"):
+        if t.text and any(k in t.text for k in keys):
+            t.text = ""
 
 
 def _fill_report_overview_row(cells, r, award_date_short: str) -> None:
@@ -890,6 +1054,11 @@ def _fill_merit_main_table(c, r, award_grade: str, signoff: str, inv: dict = Non
     _set_first_text(c[22], r.external_title or "")
     _set_first_text(c[24], (r.merit_period or "").strip())
     _set_first_text(c[26], r.merit_category or "")
+    # (7)직업·(8)소속·(9)직급·(10)직위·(11)대외직명 값 셀 → 가운데 정렬
+    # ((2)생년월일·(5)성별과 동일한 center paraPr 25 적용)
+    for ci in (14, 16, 18, 20, 22):
+        for p in c[ci].findall(".//hp:p", NS):
+            p.set("paraPrIDRef", _ALIGN_CENTER_PARA)
     _set_long_text(c[28], (mc.merit_short_summary if mc else "") or "")
     _set_first_text(c[30], award_grade)  # 추천훈격
     # c[32] 추천순위(1순위) = 양식 sample 유지
@@ -900,6 +1069,9 @@ def _fill_merit_main_table(c, r, award_grade: str, signoff: str, inv: dict = Non
         _set_first_text(c[39], inv.get("rank") or "")
         name = inv.get("name") or ""
         _set_first_text(c[41], f"{name} (인)" if name else "")
+        # 양식 조사자 셀에 빈 문단이 있어 값 뒤에 빈 줄(엔터)이 남는 것을 정리
+        for ci in (35, 37, 39, 41):
+            _collapse_to_first_paragraph(c[ci])
     _set_first_text(c[43], signoff)  # 추천관
 
 
@@ -1060,7 +1232,7 @@ def _fill_report_bundle_for_recipient(
 def _fill_report_dates(scope, body_date: str, survey_date: str) -> None:
     """날짜 paragraph 채움.
     - 현지조사 확인서 날짜(양식 sample '2026년  0월  00일') → survey_date(도장일)
-    - 본문표 위기록 확인 날짜(양식 sample '   년   월   일') → body_date(작성일/제출일)"""
+    - 본문표 위기록 확인 날짜(양식 sample '   년   월   일') → body_date(도장일, 추천관 (인))"""
     for p in _iter_paragraphs(scope):
         ts = p.findall(".//hp:t", NS)
         if not ts:
@@ -1074,6 +1246,84 @@ def _fill_report_dates(scope, body_date: str, survey_date: str) -> None:
             ts[0].text = body_date
             for t in ts[1:]:
                 t.text = ""
+
+
+def _fit_survey_to_one_page(root) -> None:
+    """현지조사사실확인서([서식3])가 대상자당 한 페이지를 넘기지 않도록, 내용이 길면
+    빈 단락을 우선순위대로 제거해 한 페이지에 맞춘다(명세14).
+
+    - 짧은/기본 내용은 빈 줄을 그대로 두어 양식을 보존한다(넘칠 때만 작동).
+    - 내용 높이는 hwp-mcp(한컴 렌더) 실측 상수로 추정한다: 내용 1줄≈32px,
+      빈줄 segH<1000≈12.8px·≥1000≈43.2px, 한 페이지 본문 가용≈900px(표 상단 113px~하단 1028px).
+    - 줄당 글자수(가중폭, 한글=1.0/그외=0.5) CPL=28은 실측 행수와 일치하도록 보정한 값.
+    - 빈줄 제거 우선순위: 큰 빈줄(≥1000) 중 뒤쪽(날짜~조사자) 먼저 → 앞쪽(섹션) →
+      작은 빈줄(600) 중 뒤쪽(확인내용) → 앞쪽(인적사항). 필요한 만큼만 제거한다.
+    - 빈줄을 다 줄여도 못 맞추면(내용이 물리적으로 너무 긺) 경고만 남기고 진행한다.
+    """
+    import unicodedata
+
+    P = "{http://www.hancom.co.kr/hwpml/2011/paragraph}p"
+    ROW_PX = 32.0
+    USABLE_PX = 900.0
+    BIG_PX, SMALL_PX = 43.2, 12.8
+    CPL = 28.0  # 줄당 글자수(가중폭 기준)
+
+    def _wlen(s: str) -> float:
+        return sum(
+            1.0 if unicodedata.east_asian_width(c) in ("W", "F") else 0.5 for c in s
+        )
+
+    def _ptext(p) -> str:
+        return "".join((t.text or "") for t in p.findall(".//hp:t", NS))
+
+    def _rows(text: str) -> int:
+        # 앞뒤 공백(라벨 줄의 들여쓰기 등)은 줄바꿈에 거의 영향 없으므로 제외하고 센다.
+        n = 0
+        for seg in text.split("\n"):
+            n += max(1, -(-int(_wlen(seg.strip())) // int(CPL)))
+        return n or 1
+
+    def _segh(p) -> int:
+        return sum(int(s.get("vertsize", "0")) for s in p.findall(".//hp:lineseg", NS))
+
+    # root(sec) 직속 단락만 대상(현지조사는 표 밖 본문 단락).
+    top = [c for c in root if etree.QName(c.tag).localname == "p"]
+    # [서식3] 시작 인덱스들
+    starts = [i for i, p in enumerate(top) if _ptext(p).strip().startswith("[서식3")]
+    for si in starts:
+        # 블록 끝 = 조사자 '성  명' 단락(없으면 다음 [서식3]/끝)
+        ei = len(top)
+        for j in range(si + 1, len(top)):
+            t = _ptext(top[j]).strip()
+            if t.startswith("성  명"):
+                ei = j + 1
+                break
+            if t.startswith("[서식3"):
+                ei = j
+                break
+        block = top[si:ei]
+        content_rows = sum(_rows(_ptext(p)) for p in block if _ptext(p).strip())
+        blanks = [p for p in block if not _ptext(p).strip()]
+        blank_px = sum(BIG_PX if _segh(p) >= 1000 else SMALL_PX for p in blanks)
+
+        def _cap(bpx: float) -> int:
+            return int((USABLE_PX - bpx) // ROW_PX)
+
+        if _cap(blank_px) >= content_rows:
+            continue  # 넘치지 않음 → 양식 그대로 둠
+        # 제거 우선순위: 큰빈줄(뒤→앞) → 작은빈줄(뒤→앞)
+        big = [p for p in blanks if _segh(p) >= 1000][::-1]
+        small = [p for p in blanks if _segh(p) < 1000][::-1]
+        for p in big + small:
+            if _cap(blank_px) >= content_rows:
+                break
+            blank_px -= BIG_PX if _segh(p) >= 1000 else SMALL_PX
+            p.getparent().remove(p)
+        if _cap(blank_px) < content_rows:
+            print(
+                "[경고] 현지조사 확인내용이 너무 길어 한 페이지에 담지 못할 수 있습니다 "
+                f"(추정 {content_rows}줄). 성품/지역여론/공적사항 입력을 줄여 주세요."
+            )
 
 
 # 위기록 가운데정렬용. 새 양식 header의 기존 CENTER paraPr(25)를 재사용한다.
@@ -1100,8 +1350,16 @@ def _apply_paragraph_alignments(root) -> None:
         if s.startswith("위 기록이 틀림") and _para_in_table(p):
             # 본문표 "위 기록이 틀림없음을 확인합니다." 가운데 정렬
             p.set("paraPrIDRef", _ALIGN_CENTER_PARA)
-        elif s.startswith("2026년") and "월" in s and "일" in s and _para_in_table(p):
-            # 본문표 위기록 밑 작성일 → 가운데 정렬 (현지조사 날짜는 표 밖이라 제외)
+        elif (
+            len(s) >= 5
+            and s[:4].isdigit()
+            and s[4] == "년"
+            and "월" in s
+            and "일" in s
+            and _para_in_table(p)
+        ):
+            # 본문표 위기록 밑 날짜(도장일) → 가운데 정렬. 연도 무관 매칭(도장일이
+            # 2026년이 아닐 수도 있으므로). 현지조사 날짜는 표 밖이라 _para_in_table로 제외.
             p.set("paraPrIDRef", _ALIGN_CENTER_PARA)
         elif s.startswith("소  속") or s.startswith("직  급") or s.startswith("성  명"):
             # 소/직/성 들여쓰기 — 양식 원본과 동일하게 일반 공백 35개로 세로 정렬.
@@ -1154,6 +1412,28 @@ def _replace_paragraph_starting_with(root, prefix: str, new_text: str, keep_lead
             for t in ts[1:]:
                 t.text = ""
             return True
+    return False
+
+
+def _fill_paragraph_after(root, anchor_prefix: str, new_text: str) -> bool:
+    """anchor_prefix로 시작하는 단락 다음의 첫 '비어있지 않은' 단락을 new_text로 채운다.
+    (예: '○ 추천사유' 다음 '-' placeholder 단락을 추천사유 본문으로 채움.)
+    anchor와 placeholder 사이에 빈 단락이 끼어 있어도 건너뛰어 placeholder를 채운다."""
+    P = "{http://www.hancom.co.kr/hwpml/2011/paragraph}p"
+    paras = list(root.iter(P))
+    for i, p in enumerate(paras):
+        joined = "".join((t.text or "") for t in p.findall(".//hp:t", NS))
+        if joined.strip().startswith(anchor_prefix):
+            for nxt in paras[i + 1 :]:
+                nts = nxt.findall(".//hp:t", NS)
+                if not nts:
+                    continue
+                if "".join((t.text or "") for t in nts).strip() == "":
+                    continue  # 빈 단락은 건너뜀
+                nts[0].text = new_text
+                for t in nts[1:]:
+                    t.text = ""
+                return True
     return False
 
 
@@ -1299,5 +1579,8 @@ def generate_checklist_hwpx(case: AwardCase, recipient: Recipient) -> Path:
     target = recipient.recipient_name or "대상자"
     out_name = f"체크리스트({rec_name} 의원_{target}).hwpx"
     out_path = GENERATED_DIR / out_name
-    _save_hwpx(CHECKLIST_TEMPLATE_PATH, out_path, new_section)
+    # normalize_fonts=True: 체크리스트도 01·02처럼 폰트를 경기천년체로 정규화.
+    # (이게 없으면 템플릿의 '경기천년바탕 Regular' 등 접미사 붙은 face가 남아 한글/렌더
+    #  엔진이 못 찾고 다른 폰트로 대체된다.)
+    _save_hwpx(CHECKLIST_TEMPLATE_PATH, out_path, new_section, normalize_fonts=True)
     return out_path

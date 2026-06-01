@@ -6,11 +6,9 @@ import {
   deleteCareer,
   deletePreviousAward,
   generateMerit,
-  generatePdf,
   getRecipient,
   upsertMerit,
 } from "../api";
-import { absoluteUrl } from "../api/client";
 import type { MeritContent, RecipientDetail } from "../types";
 import Field, { Button, Input, TextArea } from "../components/Field";
 
@@ -22,6 +20,8 @@ export default function MeritContentEditPage() {
   const [keywords, setKeywords] = useState("봉사, 청렴, 지역사회 화합, 취약계층 지원");
   const [activitySummary, setActivitySummary] = useState("");
   const [busy, setBusy] = useState(false);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const load = () =>
     getRecipient(recipientId).then(r => {
@@ -35,8 +35,18 @@ export default function MeritContentEditPage() {
   if (!r) return <div className="text-ink-500">불러오는 중...</div>;
 
   const onSave = async () => {
-    await upsertMerit(recipientId, mc);
-    alert("저장되었습니다.");
+    setSaving(true);
+    try {
+      await upsertMerit(recipientId, mc);
+      setSaveModalOpen(true);
+    } catch (err: any) {
+      alert(
+        "저장에 실패했습니다.\n" +
+          (err?.response?.data?.detail || err?.message || "")
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const onGenerate = async () => {
@@ -55,12 +65,6 @@ export default function MeritContentEditPage() {
     } finally {
       setBusy(false);
     }
-  };
-
-  const onGeneratePdf = async () => {
-    await upsertMerit(recipientId, mc);
-    const res = await generatePdf(recipientId);
-    if (res.files[0]) window.open(absoluteUrl(res.files[0].download_url), "_blank");
   };
 
   return (
@@ -86,9 +90,6 @@ export default function MeritContentEditPage() {
             onClick={() => navigate(`/recipients/${recipientId}/preview`)}
           >
             미리보기
-          </Button>
-          <Button variant="accent" onClick={onGeneratePdf}>
-            저장 + PDF 생성
           </Button>
         </div>
       </div>
@@ -148,81 +149,17 @@ export default function MeritContentEditPage() {
           />
         </Field>
 
-        <div>
-          <h3 className="text-sm font-bold text-ink-800 mb-2">
-            공적개요 (1~4번 요약)
-          </h3>
-          <div className="space-y-3">
-            {[1, 2, 3, 4].map(i => (
-              <Field key={i} label={`공적개요 ${i}`}>
-                <TextArea
-                  rows={2}
-                  value={(mc as any)[`merit_overview_${i}`] || ""}
-                  onChange={e =>
-                    setMc({ ...mc, [`merit_overview_${i}`]: e.target.value })
-                  }
-                />
-              </Field>
-            ))}
-          </div>
-        </div>
-
-        <Field label="공적사항 (본문)">
+        <Field
+          label="공적사항 (본문)"
+          hint="자유 형식으로 작성하세요. 본문은 시스템이 자동 요약하여 공적개요서 (공적 개요 1~4) 칸에 반영됩니다."
+        >
           <TextArea
-            rows={14}
+            rows={16}
             value={mc.full_merit_text || ""}
             onChange={e => setMc({ ...mc, full_merit_text: e.target.value })}
           />
         </Field>
 
-        <div>
-          <h3 className="text-sm font-bold text-ink-800 mb-3">현지조사</h3>
-          <div className="space-y-3">
-            <Field label="성품">
-              <TextArea
-                rows={2}
-                value={mc.character_assessment || ""}
-                onChange={e =>
-                  setMc({ ...mc, character_assessment: e.target.value })
-                }
-              />
-            </Field>
-            <Field label="지역여론">
-              <TextArea
-                rows={2}
-                value={mc.local_reputation || ""}
-                onChange={e =>
-                  setMc({ ...mc, local_reputation: e.target.value })
-                }
-              />
-            </Field>
-            <Field label="공적사항 일치여부">
-              <Input
-                value={mc.merit_consistency || "공적내용과 일치함"}
-                onChange={e =>
-                  setMc({ ...mc, merit_consistency: e.target.value })
-                }
-              />
-            </Field>
-          </div>
-        </div>
-
-        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 border-t border-ink-100">
-          <Button
-            variant="secondary"
-            onClick={onSave}
-            className="sm:w-auto w-full"
-          >
-            임시 저장
-          </Button>
-          <Button
-            variant="accent"
-            onClick={onGeneratePdf}
-            className="sm:w-auto w-full"
-          >
-            저장 + PDF 생성
-          </Button>
-        </div>
       </section>
 
       {/* 경력 */}
@@ -244,6 +181,52 @@ export default function MeritContentEditPage() {
           onChanged={load}
         />
       </section>
+
+      {/* 저장 (페이지 맨 아래) */}
+      <div className="flex justify-end pt-3 border-t border-ink-100">
+        <Button
+          onClick={onSave}
+          disabled={saving}
+          size="lg"
+          className="sm:w-auto w-full"
+        >
+          {saving ? "저장 중..." : "저장"}
+        </Button>
+      </div>
+
+      {/* 저장 완료 팝업 */}
+      {saveModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 sm:p-7">
+            <div className="text-center">
+              <div className="mx-auto mb-3 inline-flex items-center justify-center w-12 h-12 rounded-full bg-success-50 text-success-600 text-2xl">
+                ✓
+              </div>
+              <h3 className="text-lg font-bold text-ink-900 mb-2">
+                저장되었습니다
+              </h3>
+              <p className="text-sm text-ink-700 leading-relaxed">
+                공적 내용이 정상적으로 저장되었습니다.
+                <br />
+                이후 <strong>[문서 생성]</strong> 메뉴에서 공적개요서·공적조서·
+                체크리스트 HWPX 파일을 다운로드할 수 있습니다.
+              </p>
+            </div>
+            <div className="mt-5 flex justify-end">
+              <Button
+                onClick={() => setSaveModalOpen(false)}
+                size="md"
+              >
+                확인
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

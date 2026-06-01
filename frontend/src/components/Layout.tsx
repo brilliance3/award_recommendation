@@ -1,19 +1,36 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { getSettings } from "../api";
 
 const nav = [
-  { to: "/", label: "대시보드", end: true },
-  { to: "/cases/new", label: "새 표창 건" },
+  { to: "/quota", label: "의원 쿼터 현황" },
+  { to: "/all-cases", label: "전체 표창 현황" },
+  { to: "/", label: "관리", end: true },
+  { to: "/settings", label: "설정" },
 ];
 
 export default function Layout() {
   const loc = useLocation();
   const [open, setOpen] = useState(false);
+  const [deptName, setDeptName] = useState("보건복지전문위원실");
 
   // 라우트 변경 시 모바일 메뉴 닫기
   useEffect(() => {
     setOpen(false);
   }, [loc.pathname]);
+
+  // 설정의 부서명을 헤더·푸터에 반영 (마운트 + 설정 저장 시 갱신)
+  useEffect(() => {
+    const load = () =>
+      getSettings()
+        .then(s => {
+          if (s.department_name) setDeptName(s.department_name);
+        })
+        .catch(() => {});
+    load();
+    window.addEventListener("settings-updated", load);
+    return () => window.removeEventListener("settings-updated", load);
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-ink-50">
@@ -25,42 +42,67 @@ export default function Layout() {
         </div>
       </div>
 
-      {/* 메인 헤더 */}
-      <header className="bg-white border-b border-ink-200 sticky top-0 z-30 backdrop-blur supports-[backdrop-filter]:bg-white/90">
-        <div className="max-w-page mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-3">
+      {/* 메인 헤더 — 흰색 배경(CI 규정: 밝은 배경에는 컬러 마크) */}
+      <header className="bg-white border-b border-ink-200 sticky top-0 z-30 backdrop-blur supports-[backdrop-filter]:bg-white/95">
+        <div className="max-w-page mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-3">
+          {/* 좌측: 경기도의회 공식 가로 로고 (assembly-logo-black.png) */}
           <Link
-            to="/"
+            to="/quota"
             className="flex items-center gap-3 min-w-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded"
+            aria-label="경기도의회 표창 관리 시스템 — 의원 쿼터 현황"
           >
-            {/* 워드마크 심볼 */}
-            <span
-              aria-hidden
-              className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-gradient-to-br from-brand-600 to-accent-600 text-white shadow-card"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                className="h-5 w-5 sm:h-6 sm:w-6"
-                aria-hidden="true"
-              >
-                <path
-                  d="M12 2l2.4 5 5.6.8-4 4 1 5.7L12 14.9 6.9 17.5l1-5.7-4-4 5.6-.8L12 2z"
-                  fill="currentColor"
-                />
-              </svg>
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[11px] sm:text-xs font-semibold text-brand-700 leading-none">
-                경기도의회
+            <img
+              src="/ci/assembly-logo-black.png"
+              alt="경기도의회 Gyeonggido Assembly"
+              className="h-10 sm:h-12 w-auto select-none"
+              draggable={false}
+            />
+            <span className="hidden sm:flex flex-col min-w-0 pl-3 border-l border-ink-200">
+              <span className="text-[11px] font-semibold text-brand-700 leading-none tracking-wide">
+                {deptName}
               </span>
-              <span className="block text-sm sm:text-base font-bold text-ink-900 leading-tight truncate">
-                공적조서 자동작성 시스템
+              <span className="text-sm sm:text-base font-bold text-ink-900 leading-tight truncate mt-1">
+                표창 관리 시스템
               </span>
             </span>
           </Link>
 
-          {/* 데스크탑 GNB */}
-          <nav className="hidden md:flex items-center gap-1" aria-label="주요 메뉴">
+          {/* 우측: 슬로건 마크 (slogan-blue.png) + 모바일 햄버거 */}
+          <div className="flex items-center gap-3">
+            <img
+              src="/ci/slogan-blue.png"
+              alt="사람중심 민생중심 의회다운 의회"
+              className="hidden lg:block h-8 xl:h-9 w-auto select-none"
+              draggable={false}
+            />
+
+            <button
+              type="button"
+              className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-md text-ink-700 hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              aria-label={open ? "메뉴 닫기" : "메뉴 열기"}
+              aria-expanded={open}
+              aria-controls="mobile-menu"
+              onClick={() => setOpen(v => !v)}
+            >
+              {open ? (
+                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M6 18L18 6" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+                </svg>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* GNB — 헤더 하단 brand-700 바 (어두운 배경 + 흰색 텍스트) */}
+        <nav
+          className="hidden md:block bg-brand-700"
+          aria-label="주요 메뉴"
+        >
+          <div className="max-w-page mx-auto px-4 sm:px-6 lg:px-8 flex items-center gap-1">
             {nav.map(item => (
               <NavLink
                 key={item.to}
@@ -68,38 +110,18 @@ export default function Layout() {
                 end={item.end}
                 className={({ isActive }) =>
                   [
-                    "px-3 py-2 rounded-md text-sm font-semibold transition",
+                    "px-4 py-2.5 text-sm font-semibold transition border-b-2",
                     isActive
-                      ? "bg-brand-50 text-brand-700"
-                      : "text-ink-700 hover:bg-ink-100",
+                      ? "text-white border-gold-500 bg-brand-800"
+                      : "text-white/85 border-transparent hover:text-white hover:bg-brand-800/60",
                   ].join(" ")
                 }
               >
                 {item.label}
               </NavLink>
             ))}
-          </nav>
-
-          {/* 모바일 햄버거 */}
-          <button
-            type="button"
-            className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-md text-ink-700 hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-            aria-label={open ? "메뉴 닫기" : "메뉴 열기"}
-            aria-expanded={open}
-            aria-controls="mobile-menu"
-            onClick={() => setOpen(v => !v)}
-          >
-            {open ? (
-              <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M6 18L18 6" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
-              </svg>
-            )}
-          </button>
-        </div>
+          </div>
+        </nav>
 
         {/* 모바일 메뉴 */}
         {open && (
@@ -140,10 +162,10 @@ export default function Layout() {
           <div>
             <span className="font-semibold text-ink-700">경기도의회</span>
             <span className="mx-2 text-ink-300">|</span>
-            보건복지전문위원실
+            {deptName}
           </div>
           <div>
-            © {new Date().getFullYear()} 공적조서 자동작성 시스템. 행정 업무용
+            © {new Date().getFullYear()} 표창 관리 시스템. 행정 업무용
             내부 시스템.
           </div>
         </div>

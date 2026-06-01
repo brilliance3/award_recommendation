@@ -2,12 +2,23 @@
 import logging
 import re
 import traceback
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-from .api import award_cases, documents, merit_contents, recipients
+from .api import (
+    applications,
+    award_cases,
+    checklist,
+    dashboards,
+    documents,
+    merit_contents,
+    recipients,
+    settings,
+)
 from .config import ALLOWED_ORIGINS
 from .database import init_db
 
@@ -92,6 +103,30 @@ def create_app() -> FastAPI:
     app.include_router(recipients.router)
     app.include_router(merit_contents.router)
     app.include_router(documents.router)
+    app.include_router(checklist.router)
+    app.include_router(applications.router)
+    app.include_router(dashboards.router)
+    app.include_router(settings.router)
+
+    # --- 프론트엔드(SPA) 정적 서빙 ---
+    # 회사 인트라넷이 vercel.app은 막고 fly.dev는 통과시키므로, 백엔드(fly.dev)가
+    # 빌드된 프론트(frontend/dist → /app/frontend_dist)까지 서빙해 단일 도메인으로 제공한다.
+    # 모든 API는 /api/ 로 시작하므로 그 외 경로만 프론트로 보낸다(SPA 라우팅 fallback).
+    frontend_dir = Path(__file__).resolve().parent.parent / "frontend_dist"
+    if frontend_dir.is_dir():
+        assets_dir = frontend_dir / "assets"
+        if assets_dir.is_dir():
+            app.mount(
+                "/assets", StaticFiles(directory=str(assets_dir)), name="assets"
+            )
+
+        @app.get("/{full_path:path}")
+        def _spa(full_path: str):
+            # /api/* 는 위 라우터가 이미 처리. 여기 오는 건 프론트 경로.
+            candidate = frontend_dir / full_path
+            if full_path and candidate.is_file():
+                return FileResponse(str(candidate))  # favicon, ci 이미지 등 실제 파일
+            return FileResponse(str(frontend_dir / "index.html"))  # SPA 라우팅
 
     return app
 

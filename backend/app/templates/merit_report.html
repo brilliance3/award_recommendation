@@ -4,16 +4,20 @@
 <meta charset="UTF-8" />
 <title>공적조서 - {{ recipient_name }}</title>
 <style>
+  {{ font_face_css|safe }}
   @page {
     size: A4;
     margin: 18mm 18mm 18mm 18mm;
   }
   * { box-sizing: border-box; }
   html, body {
-    font-family: "Malgun Gothic", "맑은 고딕", "NanumGothic", "Nanum Gothic", "Noto Sans CJK KR", "Apple SD Gothic Neo", sans-serif;
+    font-family: "경기천년바탕", "Malgun Gothic", "맑은 고딕", "NanumGothic", "Nanum Gothic", "Noto Sans CJK KR", "Apple SD Gothic Neo", sans-serif;
     color: #000;
     font-size: 11pt;
     line-height: 1.55;
+  }
+  h1.cover-title, h1.doc-title, h2.section-title, .footer-title {
+    font-family: "경기천년제목", "경기천년바탕", "Malgun Gothic", sans-serif;
   }
   h1.cover-title {
     text-align: center;
@@ -196,38 +200,42 @@
       <tr>
         <td class="label">(3) 군번<br/><span class="small">(군인의 경우)</span></td>
         <td class="center">-</td>
-        <td class="label">(4) 국적<br/><span class="small">(외국인의 경우)</span></td>
-        <td class="center">-</td>
+        <td class="label">(4) 성　별</td>
+        <td class="center">{{ gender }}</td>
       </tr>
       <tr>
-        <td class="label">(5) 주　소</td>
+        <td class="label">(5) 국적<br/><span class="small">(외국인의 경우)</span></td>
+        <td colspan="3" class="center">-</td>
+      </tr>
+      <tr>
+        <td class="label">(6) 주　소</td>
         <td colspan="3" class="center">{{ address }}</td>
       </tr>
       <tr>
-        <td class="label">(6) 직　업</td>
+        <td class="label">(7) 직　업</td>
         <td class="center">{{ occupation }}</td>
-        <td class="label">(7) 소　속</td>
+        <td class="label">(8) 소　속</td>
         <td class="center">{{ organization_name }}</td>
       </tr>
       <tr>
-        <td class="label">(8) 직　급</td>
+        <td class="label">(9) 직　급</td>
         <td class="center">{{ rank_field or '' }}</td>
-        <td class="label">(9) 직　위</td>
+        <td class="label">(10) 직　위</td>
         <td class="center">{{ recipient_position_title }}</td>
       </tr>
       <tr>
-        <td class="label">(10) 대외직명</td>
+        <td class="label">(11) 대외직명</td>
         <td colspan="3" class="center">{{ external_title or recipient_position_title }}</td>
       </tr>
       <tr>
-        <td class="label">(11) 공적기간<br/><span class="small">(최소 2년 이상 기재)</span></td>
+        <td class="label">(12) 공적기간<br/><span class="small">(최소 2년 이상 기재)</span></td>
         <td class="center">{{ merit_period }}</td>
-        <td class="label">(12) 공적분야</td>
+        <td class="label">(13) 공적분야</td>
         <td class="center">{{ merit_category }}</td>
       </tr>
       <tr>
         <td class="label" colspan="4" style="text-align:left; padding:6px 10px;">
-          (13) 공적요지(50자 내외)
+          (14) 공적요지(50자 내외)
         </td>
       </tr>
       <tr>
@@ -236,24 +244,24 @@
         </td>
       </tr>
       <tr>
-        <td class="label">(14) 추천훈격</td>
+        <td class="label">(15) 추천훈격</td>
         <td class="center">{{ award_grade }}</td>
-        <td class="label">(15) 추천순위</td>
+        <td class="label">(16) 추천순위</td>
         <td class="center">{{ recommendation_rank }}</td>
       </tr>
       <tr>
         <th colspan="4" class="center">조 　 사 　 자</th>
       </tr>
       <tr>
-        <td class="label">(16) 소　속</td>
+        <td class="label">(17) 소　속</td>
         <td class="center">{{ investigator_department }}</td>
-        <td class="label">(17) 직　위</td>
+        <td class="label">(18) 직　위</td>
         <td class="center">{{ investigator_position }}</td>
       </tr>
       <tr>
-        <td class="label">(18) 직　급</td>
+        <td class="label">(19) 직　급</td>
         <td class="center">{{ investigator_rank }}</td>
-        <td class="label">(19) 성　명</td>
+        <td class="label">(20) 성　명</td>
         <td class="center">{{ investigator_name }} (인)</td>
       </tr>
     </tbody>

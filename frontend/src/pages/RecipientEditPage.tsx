@@ -3,26 +3,41 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   createRecipient,
   extractFromUrl,
+  getChecklistPublicInfo,
   getRecipient,
   updateRecipient,
 } from "../api";
 import type { Recipient, URLExtractResponse } from "../types";
 import Field, { Button, Input } from "../components/Field";
+import { MERIT_CATEGORIES } from "../data/meritCategories";
 
 const empty: Partial<Recipient> = {
   recipient_name: "",
   chinese_name: "",
   birth_date: "",
+  gender: "",
   address: "",
   region: "",
   occupation: "",
   organization_name: "",
   recipient_position_title: "",
   external_title: "",
+  rank_grade: "",
   merit_category: "",
   merit_period: "",
   recommendation_rank: "1순위",
 };
+
+function isMeritPeriodAtLeast2Years(value: string): boolean {
+  const v = value.trim();
+  if (!v) return false;
+  const yearMatch = v.match(/(\d+)\s*년/);
+  const monthMatch = v.match(/(\d+)\s*개?월/);
+  const years = yearMatch ? parseInt(yearMatch[1], 10) : 0;
+  const months = monthMatch ? parseInt(monthMatch[1], 10) : 0;
+  if (!yearMatch && !monthMatch) return false;
+  return years * 12 + months >= 24;
+}
 
 export default function RecipientEditPage() {
   const { caseId, recipientId } = useParams();
@@ -31,6 +46,9 @@ export default function RecipientEditPage() {
 
   const [form, setForm] = useState<Partial<Recipient>>(empty);
   const [url, setUrl] = useState("");
+  const [checklistSubmitted, setChecklistSubmitted] = useState<boolean | null>(
+    null
+  );
   const [extracting, setExtracting] = useState(false);
   const [extractResult, setExtractResult] = useState<URLExtractResponse | null>(
     null
@@ -41,26 +59,48 @@ export default function RecipientEditPage() {
     if (recipientId) getRecipient(recipientId).then(setForm);
   }, [recipientId]);
 
+  useEffect(() => {
+    if (!recipientId) return;
+    getChecklistPublicInfo(recipientId)
+      .then(d => setChecklistSubmitted(d.already_submitted))
+      .catch(() => setChecklistSubmitted(null));
+  }, [recipientId]);
+
+
   const setField =
     (k: keyof Recipient) => (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm({ ...form, [k]: e.target.value });
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!form.recipient_name) {
-      alert("성명은 필수입니다.");
+    const missing: string[] = [];
+    if (!form.organization_name?.trim()) missing.push("단체명");
+    if (!form.recipient_name?.trim()) missing.push("성명");
+    if (!form.birth_date) missing.push("생년월일");
+    if (!form.recipient_position_title?.trim()) missing.push("직위");
+    if (!form.merit_category?.trim()) missing.push("공적분야");
+    if (!form.merit_period?.trim()) missing.push("공적기간");
+    if (missing.length > 0) {
+      alert(`필수 항목이 비어 있습니다: ${missing.join(", ")}`);
+      return;
+    }
+    if (!isMeritPeriodAtLeast2Years(form.merit_period || "")) {
+      alert(
+        "공적기간은 2년 이상이어야 합니다.\n예: '2년', '2년 3개월', '3년 0개월'"
+      );
       return;
     }
     const payload = {
       ...form,
       birth_date: form.birth_date || undefined,
+      recommendation_rank: "1순위",
     };
     if (isCreate) {
       const r = await createRecipient(caseId!, payload);
-      navigate(`/recipients/${r.id}/merit`);
+      navigate(`/recipients/${r.id}/checklist`);
     } else {
       await updateRecipient(recipientId!, payload);
-      alert("저장되었습니다.");
+      navigate(`/recipients/${recipientId}/checklist`);
     }
   };
 
@@ -238,13 +278,26 @@ export default function RecipientEditPage() {
             />
           </Field>
         </div>
-        <Field label="생년월일">
-          <Input
-            type="date"
-            value={form.birth_date || ""}
-            onChange={setField("birth_date")}
-          />
-        </Field>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <Field label="생년월일" required>
+            <Input
+              type="date"
+              value={form.birth_date || ""}
+              onChange={setField("birth_date")}
+            />
+          </Field>
+          <Field label="성별">
+            <select
+              value={form.gender || ""}
+              onChange={e => setForm({ ...form, gender: e.target.value })}
+              className="w-full rounded-lg border border-ink-300 bg-white px-3 py-2.5 text-sm text-ink-900 hover:border-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+            >
+              <option value="">— 선택 —</option>
+              <option value="남">남</option>
+              <option value="여">여</option>
+            </select>
+          </Field>
+        </div>
         <Field label="주소">
           <Input value={form.address || ""} onChange={setField("address")} />
         </Field>
@@ -258,18 +311,24 @@ export default function RecipientEditPage() {
               onChange={setField("occupation")}
             />
           </Field>
-          <Field label="소속(기관/단체)">
+          <Field label="단체명" required>
             <Input
               value={form.organization_name || ""}
               onChange={setField("organization_name")}
             />
           </Field>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-          <Field label="직위/직명">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <Field label="직위/직명" required>
             <Input
               value={form.recipient_position_title || ""}
               onChange={setField("recipient_position_title")}
+            />
+          </Field>
+          <Field label="직급" hint="공무원의 경우 (예: 지방서기관)">
+            <Input
+              value={form.rank_grade || ""}
+              onChange={setField("rank_grade")}
             />
           </Field>
           <Field label="대외직명">
@@ -279,26 +338,29 @@ export default function RecipientEditPage() {
             />
           </Field>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-          <Field label="공적분야">
-            <Input
-              value={form.merit_category || ""}
-              onChange={setField("merit_category")}
-            />
-          </Field>
-          <Field label="공적기간" hint="예: 8년, 0년0개월">
-            <Input
-              value={form.merit_period || ""}
-              onChange={setField("merit_period")}
-            />
-          </Field>
-          <Field label="추천순위">
-            <Input
-              value={form.recommendation_rank || "1순위"}
-              onChange={setField("recommendation_rank")}
-            />
-          </Field>
-        </div>
+        <Field label="공적분야" required>
+          <select
+            value={form.merit_category || ""}
+            onChange={e =>
+              setForm({ ...form, merit_category: e.target.value })
+            }
+            className="w-full rounded-lg border border-ink-300 bg-white px-3 py-2.5 text-sm text-ink-900 hover:border-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+          >
+            <option value="">— 선택 —</option>
+            {MERIT_CATEGORIES.map(c => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="공적기간" required hint="2년 이상이어야 합니다. 예: 2년, 3년 6개월">
+          <Input
+            value={form.merit_period || ""}
+            onChange={setField("merit_period")}
+            placeholder="예: 2년 6개월"
+          />
+        </Field>
 
         <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 border-t border-ink-100">
           <Button
@@ -310,10 +372,21 @@ export default function RecipientEditPage() {
             취소
           </Button>
           <Button type="submit" className="sm:w-auto w-full">
-            {isCreate ? "추가하고 공적입력" : "저장"}
+            {isCreate ? "저장하고 체크리스트" : "저장하고 체크리스트로"}
           </Button>
         </div>
       </form>
+
+      {!isCreate && recipientId && checklistSubmitted !== null && (
+        <div className="mt-4 flex items-center gap-2 text-xs text-ink-600">
+          <span>부적격 체크리스트:</span>
+          {checklistSubmitted ? (
+            <span className="krds-badge krds-badge-brand">작성 완료</span>
+          ) : (
+            <span className="krds-badge krds-badge-ink">미작성</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

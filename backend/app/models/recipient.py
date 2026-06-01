@@ -24,12 +24,14 @@ class Recipient(Base):
     chinese_name = Column(String(100))
     birth_date = Column(Date)
     birth_yymmdd = Column(String(6))
+    gender = Column(String(10))
     address = Column(String(500))
     region = Column(String(100))
     occupation = Column(String(255))
     organization_name = Column(String(255))
     recipient_position_title = Column(String(255))
     external_title = Column(String(255))
+    rank_grade = Column(String(100))
 
     # 공적
     merit_category = Column(String(255))
@@ -63,4 +65,10 @@ class Recipient(Base):
         "GeneratedDocument",
         back_populates="recipient",
         cascade="all, delete-orphan",
+    )
+    checklist = relationship(
+        "Checklist",
+        back_populates="recipient",
+        cascade="all, delete-orphan",
+        uselist=False,
     )

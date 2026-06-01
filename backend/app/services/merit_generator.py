@@ -167,6 +167,82 @@ def generate_merit_short_summary(recipient: Recipient) -> str:
     return text.strip() if text else _rule_based_summary(recipient)
 
 
+_CIRCLED_MARKERS = ["①", "②", "③", "④"]
+_MAX_OVERVIEW_LEN = 120
+
+
+def _clip(s: str) -> str:
+    s = s.strip().strip("-•∙ ").strip()
+    return s if len(s) <= _MAX_OVERVIEW_LEN else s[:_MAX_OVERVIEW_LEN] + "…"
+
+
+def _rule_based_split(text: str) -> List[str]:
+    """본문을 4개 항목으로 분할 (규칙 기반 fallback).
+    ①②③④ > 1. 2. 3. 4. > 빈 줄 단락 > 전체→1번
+    """
+    import re
+
+    if not text or not text.strip():
+        return ["", "", "", ""]
+    text = text.strip()
+
+    if all(m in text for m in _CIRCLED_MARKERS):
+        out = []
+        for i, m in enumerate(_CIRCLED_MARKERS):
+            start = text.find(m) + 1
+            next_m = _CIRCLED_MARKERS[i + 1] if i + 1 < len(_CIRCLED_MARKERS) else None
+            end = text.find(next_m, start) if next_m else len(text)
+            first_line = text[start:end].lstrip().split("\n", 1)[0]
+            out.append(_clip(first_line))
+        return out
+
+    pattern = re.compile(r"^\s*([1-4])[.\)]\s*(.+?)$", re.MULTILINE)
+    matches = pattern.findall(text)
+    if len(matches) >= 4 and [m[0] for m in matches[:4]] == ["1", "2", "3", "4"]:
+        return [_clip(m[1]) for m in matches[:4]]
+
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    if len(paragraphs) >= 4:
+        return [_clip(p.split("\n", 1)[0]) for p in paragraphs[:4]]
+
+    return [_clip(text), "", "", ""]
+
+
+def summarize_to_overview_4(full_text: str) -> List[str]:
+    """공적사항 본문을 공적개요 4개 항목으로 자동 요약.
+
+    1) AI(Claude > OpenAI) 호출 시도 — 4개 한 줄 요약 반환
+    2) AI 실패/미설정 시 규칙 기반 분할 fallback
+
+    Returns: 길이 4 리스트. 각 항목은 한 줄 요약(빈 문자열 가능).
+    """
+    if not full_text or not full_text.strip():
+        return ["", "", "", ""]
+
+    prompt = (
+        "다음은 표창 추천 대상자의 공적사항 본문입니다.\n"
+        "본문에서 가장 핵심적인 4가지 공적을 추출해 각각 한 줄(40자 이내)의 "
+        "헤더 문장으로 요약하세요.\n\n"
+        "출력 규칙:\n"
+        " - 정확히 4줄로 출력합니다.\n"
+        " - 번호·기호(①, 1., -, * 등)는 붙이지 않습니다. 본문 문장만 출력하세요.\n"
+        " - 각 줄은 줄바꿈(\\n)으로만 구분합니다.\n"
+        " - 행정문서 문체를 유지합니다.\n"
+        " - 4개를 추출하기 어려우면 의미상 가까운 항목으로 4개를 채워주세요.\n\n"
+        "본문:\n"
+        f"{full_text}"
+    )
+
+    response = _try_anthropic(prompt) or _try_openai(prompt)
+    if response:
+        lines = [l.strip() for l in response.strip().split("\n") if l.strip()]
+        useful = [_clip(l) for l in lines if len(l.strip()) >= 5][:4]
+        if len(useful) == 4:
+            return useful
+
+    return _rule_based_split(full_text)
+
+
 def generate_recommendation_reason(recipient: Recipient) -> str:
     prompt = (
         f"다음 정보로 표창 추천사유를 3~5문장 작성. 행정문서 문체. 과장 금지.\n"

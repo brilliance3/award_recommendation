@@ -27,3 +27,6 @@ playwright>=1.47
 
 # 로컬에서 WeasyPrint를 쓰고 싶다면 주석 해제 (시스템 라이브러리 필요)
 # weasyprint>=60
+
+# 미리보기 페이지 이미지 변환 (PDF→PNG, 시스템 의존 없는 휠)
+pypdfium2>=4.0

@@ -4,8 +4,13 @@
 
 @layer base {
   :root {
-    --brand: #0a47b4;
-    --brand-700: #073a91;
+    /* 경기도의회 CI 토큰 */
+    --brand: #3c5d93;       /* GAC DARK BLUE (PANTONE 653C) */
+    --brand-700: #324d7a;
+    --brand-secondary: #2882b5; /* PANTONE 7690C */
+    --gold: #ad8b3a;        /* PANTONE 872C — 표창 강조 */
+    --silver: #999999;      /* PANTONE 421C */
+    --warm-gray: #7d7d7d;
     --accent: #007a47;
   }
   html,
@@ -90,6 +95,12 @@
   }
   .krds-badge-ink {
     @apply bg-ink-100 text-ink-700 border border-ink-200;
+  }
+  .krds-badge-democratic {
+    @apply bg-blue-50 text-blue-700 border border-blue-200;
+  }
+  .krds-badge-people {
+    @apply bg-red-50 text-red-700 border border-red-200;
   }
 
   /* 테이블 — 데스크탑 */

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { deleteCase, listCases } from "../api";
+import { useNavigate } from "react-router-dom";
+import { deleteCase, listCases, trashAllCases } from "../api";
 import type { AwardCase } from "../types";
 import { Button } from "../components/Field";
 
@@ -12,18 +12,43 @@ export default function DashboardPage() {
   const load = () => {
     setLoading(true);
     listCases()
-      .then(setCases)
+      .then(cs =>
+        // 표창일 최신순 (빈 값은 맨 아래)
+        setCases(
+          [...cs].sort((a, b) => {
+            const da = a.award_date || "";
+            const db = b.award_date || "";
+            if (!da && !db) return 0;
+            if (!da) return 1;
+            if (!db) return -1;
+            return db.localeCompare(da);
+          })
+        )
+      )
       .finally(() => setLoading(false));
   };
 
   useEffect(load, []);
 
   const onDelete = async (id: string) => {
-    if (!confirm("이 표창 건과 관련 대상자·문서를 모두 삭제합니다. 계속할까요?"))
+    if (!confirm("이 표창 건을 휴지통으로 보냅니다. (휴지통에서 복구할 수 있습니다)"))
       return;
     await deleteCase(id);
     load();
   };
+
+  const onTrashAll = async () => {
+    if (cases.length === 0) return;
+    if (
+      !confirm(
+        `관리 중인 표창건 ${cases.length}건을 모두 휴지통으로 보냅니다.\n(휴지통에서 복구할 수 있습니다) 계속할까요?`
+      )
+    )
+      return;
+    await trashAllCases();
+    load();
+  };
+
 
   return (
     <div>
@@ -34,13 +59,21 @@ export default function DashboardPage() {
             추천 표창 건을 등록·관리하고 공적조서 PDF·XLSX를 생성합니다.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             size="md"
             onClick={() => navigate("/cases/new")}
             className="w-full sm:w-auto"
           >
             <span aria-hidden>＋</span> 새 표창 건 만들기
+          </Button>
+          <Button
+            size="md"
+            variant="secondary"
+            onClick={() => navigate("/trash")}
+            className="w-full sm:w-auto"
+          >
+            🗑 휴지통
           </Button>
         </div>
       </div>
@@ -90,9 +123,14 @@ export default function DashboardPage() {
                   {cases.map(c => (
                     <tr key={c.id}>
                       <td>
-                        <Link to={`/cases/${c.id}`} className="krds-link">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/cases/${c.id}`)}
+                          className="krds-link hover:underline text-left font-medium"
+                          title="대상자·문서 확인"
+                        >
                           {c.title}
-                        </Link>
+                        </button>
                       </td>
                       <td>
                         <span className="krds-badge krds-badge-brand">
@@ -115,31 +153,13 @@ export default function DashboardPage() {
                         </span>
                       </td>
                       <td className="text-right">
-                        <div className="inline-flex gap-1.5">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => navigate(`/cases/${c.id}`)}
-                          >
-                            대상자
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() =>
-                              navigate(`/cases/${c.id}/download`)
-                            }
-                          >
-                            문서
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() => onDelete(c.id)}
-                          >
-                            삭제
-                          </Button>
-                        </div>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => onDelete(c.id)}
+                        >
+                          삭제
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -152,12 +172,13 @@ export default function DashboardPage() {
           <ul className="md:hidden space-y-3">
             {cases.map(c => (
               <li key={c.id} className="krds-card krds-card-pad">
-                <Link
-                  to={`/cases/${c.id}`}
-                  className="block text-base font-bold text-ink-900 hover:text-brand-700"
+                <button
+                  type="button"
+                  onClick={() => navigate(`/cases/${c.id}`)}
+                  className="block text-base font-bold text-ink-900 hover:text-brand-700 text-left"
                 >
                   {c.title}
-                </Link>
+                </button>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   <span className="krds-badge krds-badge-brand">
                     {c.award_grade}
@@ -182,21 +203,7 @@ export default function DashboardPage() {
                     {c.award_date || "-"}
                   </dd>
                 </dl>
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => navigate(`/cases/${c.id}`)}
-                  >
-                    대상자
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => navigate(`/cases/${c.id}/download`)}
-                  >
-                    문서
-                  </Button>
+                <div className="mt-4 flex justify-end">
                   <Button
                     size="sm"
                     variant="danger"
@@ -209,6 +216,20 @@ export default function DashboardPage() {
             ))}
           </ul>
         </>
+      )}
+
+      {!loading && cases.length > 0 && (
+        <div className="mt-8 rounded-lg border border-danger-200 bg-danger-50/40 p-4">
+          <h2 className="text-sm font-bold text-danger-700">전체 삭제</h2>
+          <p className="text-xs text-ink-600 mt-0.5">
+            관리 중인 표창건을 한 번에 휴지통으로 보냅니다 (휴지통에서 복구 가능).
+          </p>
+          <div className="mt-3">
+            <Button size="sm" variant="ghost" onClick={onTrashAll}>
+              전체 삭제 (휴지통으로)
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );

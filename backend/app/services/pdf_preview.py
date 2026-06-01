@@ -4,6 +4,7 @@ soffice CLI를 subprocess로 호출. 변환 결과를 GENERATED_DIR/preview/ 에
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import subprocess
@@ -16,6 +17,36 @@ NODE_BIN = shutil.which("node") or "node"
 RENDER_SCRIPT = Path(__file__).resolve().parents[2] / "render" / "render_svg.mjs"
 PREVIEW_DIR = GENERATED_DIR / "preview"
 PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
+_CACHE_DIR = PREVIEW_DIR / "cache"
+_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+# 렌더 방식이 바뀌면(폰트 임베드 추가 등) 이 값을 올려 옛 캐시를 무효화한다.
+_RENDER_VERSION = "2026-06-02-perpage-firstpage"
+
+
+def convert_to_pdf_cached(src_path: Path, engine: str = "soffice") -> Path:
+    """미리보기용 PDF 변환 + 내용 해시 캐시.
+
+    소스(HWPX/XLSX) 내용이 같으면 이미 변환해 둔 PDF를 즉시 반환한다(변환 생략).
+    대상자 데이터가 바뀌면 소스 바이트가 달라져 자동으로 새로 변환된다.
+    배포 서버에서 chromium/soffice 변환이 무거워 첫 변환은 수십 초 걸리므로,
+    같은 내용 재조회는 캐시로 즉시 응답해 체감 속도를 크게 높인다.
+    engine: 'soffice' | 'rhwp'.
+    """
+    data = src_path.read_bytes()
+    # 캐시 키에 렌더 버전(_RENDER_VERSION)을 넣어, 폰트 임베드 등 렌더 방식이 바뀌면
+    # 소스 내용이 같아도 옛 캐시(폰트 깨진 PDF)를 재사용하지 않고 새로 변환한다.
+    key = hashlib.sha256(
+        (_RENDER_VERSION + "\0" + engine).encode() + b"\0" + data
+    ).hexdigest()[:32]
+    cached = _CACHE_DIR / f"{key}.pdf"
+    if cached.exists() and cached.stat().st_size > 0:
+        return cached
+    out = convert_to_pdf_rhwp(src_path) if engine == "rhwp" else convert_to_pdf(src_path)
+    try:
+        shutil.copyfile(out, cached)
+        return cached
+    except Exception:
+        return out  # 캐시 복사 실패 시 원본 반환
 
 # 한글(한컴) A4 한 페이지의 픽셀 크기(96dpi). rhwp가 내는 SVG의 width/height와 동일.
 _PAGE_W_PX = 793.7066666666667
@@ -118,35 +149,131 @@ def convert_to_pdf_rhwp(src_path: Path) -> Path:
     return pdf_path
 
 
-def _svgs_to_pdf(svgs, pdf_path: Path) -> None:
-    """페이지 SVG들을 A4 PDF로 합친다 (chromium 인쇄, 페이지당 SVG 1장)."""
-    from playwright.sync_api import sync_playwright
+_FONTS_DIR = Path(__file__).resolve().parents[2] / "render" / "fonts"
 
-    parts = [
-        f'<div class="page">{s.read_text(encoding="utf-8")}</div>' for s in svgs
+
+def _font_face_css() -> str:
+    """SVG가 요청하는 경기천년체 패밀리명(경기천년바탕/경기천년제목)을 실제 OTF 파일에
+    바인딩하는 @font-face CSS를 base64로 임베드해 반환.
+
+    배포 서버에는 설치 폰트의 패밀리명이 '경기천년바탕OTF'(OTF 접미사)라 SVG의
+    '경기천년바탕' 요청과 매칭이 안 돼 Noto로 fallback 되는 문제가 있었다. 시스템 폰트
+    매칭에 의존하지 않고 요청 이름 그대로 OTF를 임베드하면 chromium이 정확히 렌더한다.
+    """
+    import base64
+
+    # (요청 패밀리명, weight, 파일)
+    faces = [
+        ("경기천년바탕", "normal", "경기천년바탕OTF_Regular.otf"),
+        ("경기천년바탕", "bold", "경기천년바탕OTF_Bold.otf"),
+        ("경기천년제목", "normal", "경기천년제목OTF_Medium.otf"),
+        ("경기천년제목", "bold", "경기천년제목OTF_Bold.otf"),
     ]
-    html = (
+    css = []
+    for family, weight, fname in faces:
+        fp = _FONTS_DIR / fname
+        if not fp.exists():
+            continue
+        b64 = base64.b64encode(fp.read_bytes()).decode()
+        css.append(
+            f"@font-face{{font-family:'{family}';font-weight:{weight};"
+            f"src:url(data:font/otf;base64,{b64}) format('opentype');}}"
+        )
+    return "".join(css)
+
+
+def pdf_page_count(pdf_path: Path) -> int:
+    """PDF 페이지 수."""
+    import pypdfium2 as pdfium
+
+    doc = pdfium.PdfDocument(str(pdf_path))
+    try:
+        return len(doc)
+    finally:
+        doc.close()
+
+
+def pdf_page_png(pdf_path: Path, page_index: int, scale: float = 2.0) -> bytes:
+    """PDF의 한 페이지를 PNG 바이트로 렌더(pypdfium2, 시스템 의존 없음).
+
+    미리보기를 '페이지 이미지 + 좌우 화살표'로 보여주기 위해 사용. react-pdf(worker)에
+    의존하지 않아 모든 배포 환경에서 동작한다.
+    """
+    import io
+
+    import pypdfium2 as pdfium
+
+    doc = pdfium.PdfDocument(str(pdf_path))
+    try:
+        n = len(doc)
+        idx = max(0, min(page_index, n - 1))
+        bitmap = doc[idx].render(scale=scale)
+        pil = bitmap.to_pil()
+        buf = io.BytesIO()
+        pil.save(buf, format="PNG")
+        return buf.getvalue()
+    finally:
+        doc.close()
+
+
+def _page_html(svg_text: str) -> str:
+    """SVG 한 장을 페이지 크기에 맞춰 렌더하는 HTML(경기천년체 임베드 포함)."""
+    return (
         '<!doctype html><html><head><meta charset="utf-8"><style>'
-        "*{margin:0;padding:0;box-sizing:border-box;}"
-        "@page{size:A4;margin:0;}"
-        f".page{{width:{_PAGE_W_PX}px;height:{_PAGE_H_PX}px;overflow:hidden;"
-        "page-break-after:always;}"
-        ".page:last-child{page-break-after:auto;}"
+        + _font_face_css()  # 경기천년체를 직접 임베드 (시스템 폰트명 매칭 의존 제거)
+        + "*{margin:0;padding:0;box-sizing:border-box;}html,body{background:#fff;}"
+        f".page{{width:{_PAGE_W_PX}px;height:{_PAGE_H_PX}px;overflow:hidden;}}"
         f"svg{{display:block;width:{_PAGE_W_PX}px;height:{_PAGE_H_PX}px;}}"
-        "</style></head><body>" + "".join(parts) + "</body></html>"
+        "</style></head><body>"
+        f'<div class="page">{svg_text}</div></body></html>'
     )
+
+
+def _svgs_to_pdf(svgs, pdf_path: Path) -> None:
+    """페이지 SVG들을 A4 PDF로 합친다(벡터, 텍스트 보존).
+
+    **주의**: chromium page.pdf()에 SVG 여러 장을 한 HTML(page-break)로 넣어 한 번에
+    인쇄하면 일부 셀 텍스트((2)생년월일·(8)소속 등)가 누락되는 버그가 있다(화면 렌더는
+    정상). 페이지를 '한 장씩' 따로 인쇄하면 누락이 없으므로, 페이지별 1장 PDF를 만든 뒤
+    pypdf로 병합한다. 벡터+텍스트가 보존돼 도장((인) 텍스트 탐지)도 정상 동작한다.
+    """
+    from io import BytesIO
+
+    from playwright.sync_api import sync_playwright
+    from pypdf import PdfReader, PdfWriter
+
+    page_pdfs = []
     with sync_playwright() as p:
         browser = p.chromium.launch()
         try:
             page = browser.new_page()
-            page.set_content(html, wait_until="networkidle")
-            page.pdf(
-                path=str(pdf_path),
-                prefer_css_page_size=True,
-                print_background=True,
-            )
+            for s in svgs:
+                page.set_content(
+                    _page_html(s.read_text(encoding="utf-8")), wait_until="networkidle"
+                )
+                # 임베드 경기천년체 로드 완료까지 대기(미완 시 fallback 박힘 방지)
+                try:
+                    page.wait_for_function(
+                        "document.fonts.status === 'loaded'", timeout=10000
+                    )
+                except Exception:
+                    page.wait_for_timeout(1500)
+                page_pdfs.append(
+                    page.pdf(prefer_css_page_size=True, print_background=True)
+                )
         finally:
             browser.close()
+    if not page_pdfs:
+        raise RuntimeError("미리보기 페이지 렌더 결과가 없습니다")
+    writer = PdfWriter()
+    for buf in page_pdfs:
+        reader = PdfReader(BytesIO(buf))
+        # SVG 1장 = 페이지 1장. 내용이 CSS @page보다 미세히 넘쳐 생기는 빈 2번째
+        # 페이지는 버리고 첫 페이지만 사용한다(페이지 수 2배 방지).
+        if reader.pages:
+            writer.add_page(reader.pages[0])
+    with open(pdf_path, "wb") as f:
+        writer.write(f)
 
 
 def convert_to_pdf(src_path: Path) -> Path:
@@ -163,9 +290,21 @@ def convert_to_pdf(src_path: Path) -> Path:
     out_dir = PREVIEW_DIR
     env = os.environ.copy()
     env.setdefault("HOME", str(Path.home()))
+    # 전용 LibreOffice 프로파일 디렉토리. 한 번 만들어 재사용하면 매 호출마다 프로파일을
+    # 새로 초기화(H2Orestart 로딩 포함)하지 않아 두 번째 변환부터 크게 빨라진다. 또한
+    # 동시 호출 시 기본 프로파일 lock 충돌로 멈추는 것을 막는다.
+    # 경로에 공백·한글이 있으면 file:// URI가 깨져 LibreOffice가 Abort 하므로(로컬 맥의
+    # '클로드 코드' 경로), 공백·비ASCII 없는 임시경로에 둔다. 배포(/data)는 영향 없음.
+    import tempfile
+
+    profile_dir = Path(tempfile.gettempdir()) / "award_soffice_profile"
+    profile_uri = "file://" + str(profile_dir)
+    # 옵션은 최소로. --nologo/--nofirststartwizard/--norestore 는 일부 LibreOffice
+    # 버전에서 Abort trap 충돌을 일으키므로 쓰지 않는다. 전용 프로파일만 지정.
     result = subprocess.run(
         [
             SOFFICE_BIN,
+            f"-env:UserInstallation={profile_uri}",
             "--headless",
             "--convert-to",
             "pdf",
@@ -175,7 +314,7 @@ def convert_to_pdf(src_path: Path) -> Path:
         ],
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=300,  # 첫 변환은 프로파일 초기화로 느릴 수 있어 넉넉히
         env=env,
     )
     pdf_path = out_dir / (hwpx_path.stem + ".pdf")

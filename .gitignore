@@ -13,6 +13,16 @@ backend/storage/uploads/*
 !backend/storage/generated/.gitkeep
 !backend/storage/uploads/.gitkeep
 
+# 민감: 실제 도장 이미지 — 공개 저장소에 올리지 않음(위조 위험). 운영은 Fly 볼륨에 업로드.
+backend/storage/seals/
+frontend/public/seals/
+
+# 빌드 산출물 — deploy.sh가 배포 시 frontend/dist를 복사해 재생성
+backend/frontend_dist/
+
+# 백업/임시
+*.bak
+
 # Node
 node_modules/
 dist/

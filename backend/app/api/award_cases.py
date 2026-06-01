@@ -1,6 +1,8 @@
 """표창 건 API"""
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
@@ -33,7 +35,12 @@ def _to_detail(case: models.AwardCase) -> schemas.AwardCaseDetail:
 
 @router.get("", response_model=list[schemas.AwardCaseRead])
 def list_cases(db: Session = Depends(get_db)) -> list[schemas.AwardCaseRead]:
-    cases = db.query(models.AwardCase).order_by(models.AwardCase.created_at.desc()).all()
+    cases = (
+        db.query(models.AwardCase)
+        .filter(models.AwardCase.deleted_at.is_(None))
+        .order_by(models.AwardCase.created_at.desc())
+        .all()
+    )
     return [_to_read(c) for c in cases]
 
 
@@ -46,17 +53,96 @@ def create_case(payload: schemas.AwardCaseCreate, db: Session = Depends(get_db))
     return _to_read(case)
 
 
+# --- 휴지통 (정적 경로 — /{case_id} 동적 라우트보다 먼저 등록) ---
+@router.get("/trash", response_model=list[schemas.AwardCaseRead])
+def list_trash(db: Session = Depends(get_db)) -> list[schemas.AwardCaseRead]:
+    """휴지통(삭제됨) 목록 — 최근 삭제순."""
+    cases = (
+        db.query(models.AwardCase)
+        .filter(models.AwardCase.deleted_at.isnot(None))
+        .order_by(models.AwardCase.deleted_at.desc())
+        .all()
+    )
+    return [_to_read(c) for c in cases]
+
+
+@router.post("/trash-all")
+def trash_all(db: Session = Depends(get_db)):
+    """관리 목록의 모든 표창건을 휴지통으로 이동 (전체 삭제)."""
+    now = datetime.utcnow()
+    db.query(models.AwardCase).filter(models.AwardCase.deleted_at.is_(None)).update(
+        {models.AwardCase.deleted_at: now}, synchronize_session=False
+    )
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/restore-all")
+def restore_all(db: Session = Depends(get_db)):
+    """휴지통의 모든 표창건을 관리로 복구 (전체 복구)."""
+    db.query(models.AwardCase).filter(models.AwardCase.deleted_at.isnot(None)).update(
+        {models.AwardCase.deleted_at: None}, synchronize_session=False
+    )
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/trash/empty")
+def empty_trash(db: Session = Depends(get_db)):
+    """휴지통 비우기 — 삭제된 표창건을 영구 삭제(대상자·문서 cascade)."""
+    cases = (
+        db.query(models.AwardCase)
+        .filter(models.AwardCase.deleted_at.isnot(None))
+        .all()
+    )
+    for c in cases:
+        db.delete(c)
+    db.commit()
+    return {"ok": True, "deleted": len(cases)}
+
+
 @router.get("/{case_id}", response_model=schemas.AwardCaseDetail)
 def get_case(case_id: str, db: Session = Depends(get_db)):
     case = get_case_or_404(db, case_id)
     return _to_detail(case)
 
 
+@router.get("/{case_id}/preview-data", response_model=schemas.AwardCasePreview)
+def get_case_preview(case_id: str, db: Session = Depends(get_db)):
+    """문서 미리보기용 — 각 recipient의 본문·경력·과거표창까지 포함된 전체 detail."""
+    case = get_case_or_404(db, case_id)
+    preview = schemas.AwardCasePreview.model_validate(case)
+    try:
+        preview.recipient_count = len(case.recipients)
+    except Exception:
+        preview.recipient_count = 0
+    return preview
+
+
 @router.patch("/{case_id}", response_model=schemas.AwardCaseRead)
 def update_case(case_id: str, payload: schemas.AwardCaseUpdate, db: Session = Depends(get_db)):
     case = get_case_or_404(db, case_id)
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    # seal_applied 변경 시 도장 날짜 기록/해제 (현지조사 확인서 날짜로 사용)
+    if "seal_applied" in data:
+        if data["seal_applied"] and not case.seal_applied:
+            case.seal_applied_at = datetime.utcnow()
+        elif not data["seal_applied"]:
+            case.seal_applied_at = None
+    for k, v in data.items():
         setattr(case, k, v)
+    # 추천의원이 바뀌면 공적조서 추천관(full_title)도 재생성 (예: 의원→위원장 이전)
+    if "recommender_name" in data:
+        setting = db.query(models.AppSetting).first()
+        agency = (setting.agency_name if setting else None) or "경기도의회"
+        committee = (
+            case.recommender_department
+            or (setting.committee_name if setting else None)
+            or "보건복지위원회"
+        )
+        case.recommender_full_title = (
+            f"{agency} {committee} 의원   {case.recommender_name or ''}"
+        )
     db.commit()
     db.refresh(case)
     return _to_read(case)
@@ -64,6 +150,25 @@ def update_case(case_id: str, payload: schemas.AwardCaseUpdate, db: Session = De
 
 @router.delete("/{case_id}")
 def delete_case(case_id: str, db: Session = Depends(get_db)):
+    """삭제 → 휴지통으로 이동(soft delete)."""
+    case = get_case_or_404(db, case_id)
+    case.deleted_at = datetime.utcnow()
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/{case_id}/restore")
+def restore_case(case_id: str, db: Session = Depends(get_db)):
+    """휴지통 → 관리로 복구."""
+    case = get_case_or_404(db, case_id)
+    case.deleted_at = None
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/{case_id}/permanent")
+def permanent_delete_case(case_id: str, db: Session = Depends(get_db)):
+    """완전 삭제 — 표창건·대상자·문서를 DB에서 영구 제거."""
     case = get_case_or_404(db, case_id)
     db.delete(case)
     db.commit()
