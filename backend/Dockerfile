@@ -1,10 +1,12 @@
 # Playwright 공식 이미지 (Chromium 사전 설치) → PDF 엔진은 playwright 사용
 FROM mcr.microsoft.com/playwright/python:v1.47.0-jammy
 
-# 한글 폰트 (Noto Sans CJK / 나눔) + LibreOffice (공적조서 HWPX→PDF 변환용)
+# 한글 폰트 (Noto Sans CJK / 나눔) + LibreOffice (01 공적개요서·03 표창대상자 → PDF) +
+# JRE (H2Orestart 설치/구동에 unopkg가 Java를 요구함)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto-cjk fonts-nanum \
     libreoffice-writer libreoffice-calc curl \
+    default-jre-headless libreoffice-java-common \
     && rm -rf /var/lib/apt/lists/*
 
 # H2Orestart — LibreOffice용 HWP/HWPX import 필터.
@@ -20,8 +22,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
     playwright install chromium
 
-# 02 공적조서 미리보기는 rhwp(@rhwp/core WASM)로 렌더해 한컴 한글과 동일한 페이지
-# 분할을 재현한다. playwright 베이스 이미지에 Node가 포함되어 있어 npm 설치만 추가.
+# 02 공적조서 미리보기는 rhwp(@rhwp/core WASM)를 Node로 렌더해 한컴 한글과 동일한
+# 페이지 분할을 재현한다. 베이스 이미지에 Node가 없으므로 NodeSource로 설치.
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
 COPY render ./render
 RUN cd render && npm install --omit=dev --no-audit --no-fund
 # 미리보기 글꼴 일치: 경기천년체를 시스템 폰트로 설치(chromium이 SVG의 경기천년바탕을
