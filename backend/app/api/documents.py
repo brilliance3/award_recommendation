@@ -620,36 +620,49 @@ def generate_recipient_list_xlsx(case_id: str, db: Session = Depends(get_db)):
     response_model=schemas.GeneratedFileInfo,
 )
 def generate_zip(case_id: str, db: Session = Depends(get_db)):
-    """ZIP 전체 다운로드: 01 HWPX + 02 공적조서 도장 PDF + 03 XLSX + 서식8 HWPX(체크리스트 작성된 대상자별).
+    """ZIP 전체 다운로드: 01 HWPX + 02 공적조서 HWPX + 03 XLSX + 서식8 HWPX(체크리스트 작성된 대상자별).
 
-    02 공적조서는 도장 찍힌 PDF로 포함하므로, 도장(seal_applied)을 찍은 뒤에만 전체 다운로드 가능."""
+    02 공적조서는 한글에서 열어 PDF로 저장·도장하는 워크플로우이므로 HWPX로 포함한다.
+    (서버 측 도장 PDF 렌더는 사용하지 않는다.)"""
     case = get_case_or_404(db, case_id)
     if not case.recipients:
         raise HTTPException(status_code=400, detail="대상자가 없습니다")
-    if not case.seal_applied:
-        raise HTTPException(
-            status_code=400,
-            detail="공적조서에 도장을 찍은 후 전체 다운로드할 수 있습니다.",
-        )
 
     files = []
     with _chair_override_ctx(case, db):  # chair_sign이면 문서 추천관을 위원장 명의로
         # 01 공적개요서 HWPX
         files.append(hwpx_generator.generate_merit_overview_hwpx(case))
+        # 02 공적조서 HWPX (한글에서 PDF 저장·도장용)
+        files.append(
+            hwpx_generator.generate_merit_report_hwpx(
+                case, investigator=_investigator_dict(db)
+            )
+        )
         # 03 표창대상자 XLSX
         files.append(xlsx_generator.generate_recipient_list_xlsx(case))
         # 서식8 체크리스트 HWPX (자가 체크리스트 제출된 대상자만)
         for r in case.recipients:
             if r.checklist and r.checklist.submitted_at:
                 files.append(hwpx_generator.generate_checklist_hwpx(case, r))
-    # 02 공적조서 — 도장 찍힌 PDF (HWPX 대신). _generate_report_pdf가 자체 chair_override 적용.
-    files.append(_generate_report_pdf(case, stamped=True, db=db))
 
     zip_name = f"표창추천_{case.title}.zip"
     zip_path = zip_packager.package_files(zip_name, files)
     _register_document(db, case.id, None, "zip", zip_path)
     return schemas.GeneratedFileInfo(
         type="zip", file_name=zip_path.name, download_url=_download_url(zip_path.name)
+    )
+
+
+@router.get("/api/recipient-xlsx-template")
+def recipient_xlsx_template(db: Session = Depends(get_db)):
+    """표창대상자 업로드용 빈 서식(XLSX) 다운로드 — 제목·헤더 + 빈 입력 행."""
+    setting = db.query(models.AppSetting).first()
+    grade = (setting.award_grade if setting else None) or "경기도의회 의장 표창"
+    path = xlsx_generator.generate_recipient_list_template_xlsx(award_grade=grade)
+    return FileResponse(
+        path,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename="표창대상자_업로드서식.xlsx",
     )
 
 

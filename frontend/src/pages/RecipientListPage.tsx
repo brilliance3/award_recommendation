@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { deleteRecipient, getCase, importXlsx, updateCase } from "../api";
+import { absoluteUrl } from "../api/client";
 import type { AwardCaseDetail } from "../types";
 import { Button, Input } from "../components/Field";
 
@@ -100,6 +101,16 @@ export default function RecipientListPage() {
     await importXlsx(caseId, f);
     load();
     if (fileRef.current) fileRef.current.value = "";
+  };
+
+  // 업로드용 빈 서식(XLSX) 다운로드
+  const onDownloadTemplate = () => {
+    const a = document.createElement("a");
+    a.href = absoluteUrl("/api/recipient-xlsx-template");
+    a.download = "표창대상자_업로드서식.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   return (
@@ -217,6 +228,9 @@ export default function RecipientListPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button size="md" variant="ghost" onClick={onDownloadTemplate}>
+            서식 다운로드
+          </Button>
           <Button
             size="md"
             variant="secondary"

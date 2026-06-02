@@ -5,10 +5,73 @@ ANTHROPIC_API_KEY 또는 OPENAI_API_KEY 가 있으면 LLM 호출, 없으면 규�
 """
 from __future__ import annotations
 
+import os
+import subprocess
 from typing import List, Optional
 
 from ..config import ANTHROPIC_API_KEY, OPENAI_API_KEY
 from ..models import Recipient
+
+# 로컬에 인증된 LLM CLI 경로 (API 키 없이 사용). claude=Anthropic 로그인, codex=ChatGPT,
+# gemini=Google OAuth. 배포 서버 등 미설치 환경에서는 자동으로 건너뛰고 규칙기반 폴백.
+_CLI_BIN_DIRS = [
+    os.path.expanduser("~/.local/bin"),
+    os.path.expanduser("~/.npm-global/bin"),
+]
+
+
+def _cli_path(name: str) -> Optional[str]:
+    for d in _CLI_BIN_DIRS:
+        p = os.path.join(d, name)
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def _cli_env() -> dict:
+    env = os.environ.copy()
+    env["PATH"] = os.pathsep.join(_CLI_BIN_DIRS + [env.get("PATH", "")])
+    env["GEMINI_CLI_TRUST_WORKSPACE"] = "true"  # gemini 비대화형 신뢰 통과
+    return env
+
+
+def _try_cli_llm(prompt: str) -> Optional[str]:
+    """로컬 인증 LLM CLI로 프롬프트 실행 (claude → gemini → codex 순). 실패 시 None.
+
+    API 키가 없을 때 규칙기반보다 훨씬 나은 요약/작성을 위해 사용한다. 각 CLI는
+    사용자 계정으로 이미 로그인돼 있어 별도 키가 필요 없다.
+    """
+    candidates = [
+        ("claude", ["-p", prompt]),  # 한국어 행정문서 품질 1순위
+        ("gemini", ["-p", prompt]),
+        ("codex", ["exec", "--skip-git-repo-check", prompt]),
+    ]
+    for name, args in candidates:
+        binp = _cli_path(name)
+        if not binp:
+            continue
+        try:
+            r = subprocess.run(
+                [binp, *args],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                env=_cli_env(),
+                cwd="/tmp",  # 신뢰/쓰기 안전한 작업 디렉터리
+            )
+        except Exception:
+            continue
+        out = (r.stdout or "").strip()
+        # gemini 등의 비-내용 로그 라인 제거
+        lines = [
+            ln for ln in out.splitlines()
+            if "Ripgrep is not available" not in ln
+            and "Falling back to GrepTool" not in ln
+        ]
+        out = "\n".join(lines).strip()
+        if out:
+            return out
+    return None
 
 
 SECTION_TITLES = [
@@ -148,8 +211,11 @@ def generate_merit_full_text(
     activity_summary: Optional[str] = None,
 ) -> str:
     prompt = _build_prompt(recipient, keywords, activity_summary)
-    return _try_anthropic(prompt) or _try_openai(prompt) or _rule_based_full_text(
-        recipient, keywords, activity_summary
+    return (
+        _try_anthropic(prompt)
+        or _try_openai(prompt)
+        or _try_cli_llm(prompt)
+        or _rule_based_full_text(recipient, keywords, activity_summary)
     )
 
 
@@ -163,7 +229,7 @@ def generate_merit_short_summary(recipient: Recipient) -> str:
         f"공적분야: {recipient.merit_category or ''}\n"
         f"공적기간: {recipient.merit_period or ''}"
     )
-    text = _try_anthropic(prompt) or _try_openai(prompt)
+    text = _try_anthropic(prompt) or _try_openai(prompt) or _try_cli_llm(prompt)
     return text.strip() if text else _rule_based_summary(recipient)
 
 
@@ -233,7 +299,7 @@ def summarize_to_overview_4(full_text: str) -> List[str]:
         f"{full_text}"
     )
 
-    response = _try_anthropic(prompt) or _try_openai(prompt)
+    response = _try_anthropic(prompt) or _try_openai(prompt) or _try_cli_llm(prompt)
     if response:
         lines = [l.strip() for l in response.strip().split("\n") if l.strip()]
         useful = [_clip(l) for l in lines if len(l.strip()) >= 5][:4]
@@ -250,5 +316,5 @@ def generate_recommendation_reason(recipient: Recipient) -> str:
         f"소속: {recipient.organization_name or ''}\n"
         f"공적분야: {recipient.merit_category or ''}"
     )
-    text = _try_anthropic(prompt) or _try_openai(prompt)
+    text = _try_anthropic(prompt) or _try_openai(prompt) or _try_cli_llm(prompt)
     return text.strip() if text else _rule_based_reason(recipient)

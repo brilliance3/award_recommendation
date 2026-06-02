@@ -90,9 +90,13 @@ def _font_face_css_url(base: str = "/api/fonts") -> str:
     페이지를 넘길 때마다 재다운로드하지 않는다(미리보기 속도 개선)."""
     from urllib.parse import quote
 
+    # ' Regular' 접미사 포함명: header.xml id0이 '경기천년바탕 Regular'라 SVG가 그 이름을
+    # 요청한다 → 동일 OTF로 바인딩해 폰트 미설치 서버에서도 폴백 없이 렌더되게 한다.
     faces = [
         ("경기천년바탕", "normal", "경기천년바탕OTF_Regular.otf"),
         ("경기천년바탕", "bold", "경기천년바탕OTF_Bold.otf"),
+        ("경기천년바탕 Regular", "normal", "경기천년바탕OTF_Regular.otf"),
+        ("경기천년바탕 Regular", "bold", "경기천년바탕OTF_Bold.otf"),
         ("경기천년제목", "normal", "경기천년제목OTF_Medium.otf"),
         ("경기천년제목", "bold", "경기천년제목OTF_Bold.otf"),
     ]

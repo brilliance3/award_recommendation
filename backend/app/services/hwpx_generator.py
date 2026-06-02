@@ -238,25 +238,47 @@ def _normalize_header_fonts(header_bytes: bytes) -> bytes:
         fr = cp.find(HH + "fontRef")
         if fr is None:
             continue
+        # 제목 '공 적 조 서'(BOTTOM·SLIM_THICK 밑줄)은 경기천년바탕 Bold(id2)로 매핑한다.
+        # 이름참조 'Regular'는 PDF(rhwp) 렌더 시 실제 폰트의 깊은 한글 받침이 밑줄과 겹치는데,
+        # 'Bold' 이름은 @font-face 미정의→디센더 짧은 폴백으로 렌더돼 밑줄이 분리된다(정답 샘플과 동일).
+        # 한글(한컴)에서는 실제 경기천년바탕 Bold로 제목이 굵게 표시된다.
+        ul = cp.find(HH + "underline")
+        is_title = (
+            ul is not None
+            and ul.get("type") == "BOTTOM"
+            and ul.get("shape") == "SLIM_THICK"
+        )
         for attr in ("hangul", "latin", "hanja", "japanese", "other", "symbol", "user"):
             v = fr.get(attr)
             if v is not None:
-                fr.set(attr, "1" if v == "1" else "0")
+                fr.set(attr, "2" if is_title else ("1" if v == "1" else "0"))
     for ff in root.iter(HH + "fontface"):
         for f in list(ff.findall(HH + "font")):
             ff.remove(f)
-        for fid, face in (("0", "경기천년바탕"), ("1", "경기천년제목")):
+        # input.hwpx(한컴 정답 파일)의 폰트 테이블을 그대로 복제한다.
+        # 임베드 없이 OS에 설치된 경기천년바탕을 정확한 face 이름으로 이름 참조한다.
+        #   id0='경기천년바탕 Regular'(본문, substFont 없음)
+        #   id1='경기천년바탕'(substFont 함초롬돋움)
+        # 한컴이 실제로 쓰는 face 이름과 일치시켜 폰트 매핑이 어긋나지 않게 한다.
+        for fid, face, sub_face in (
+            ("0", "경기천년바탕 Regular", None),
+            ("1", "경기천년바탕", "함초롬돋움"),
+            # id2: 제목 전용 Bold. 이름참조로 한글에선 경기천년바탕 Bold, PDF(rhwp)에선
+            # @font-face 미정의→폴백 렌더되어 제목 밑줄이 글자와 겹치지 않는다(정답 샘플과 동일).
+            ("2", "경기천년바탕 Bold", "함초롬돋움"),
+        ):
             font = etree.SubElement(ff, HH + "font")
             font.set("id", fid)
             font.set("face", face)
             font.set("type", "TTF")
             font.set("isEmbedded", "0")
-            sub = etree.SubElement(font, HH + "substFont")
-            sub.set("face", "함초롬돋움")
-            sub.set("type", "TTF")
-            sub.set("isEmbedded", "0")
-            sub.set("binaryItemIDRef", "")
-        ff.set("fontCnt", "2")
+            if sub_face:
+                sub = etree.SubElement(font, HH + "substFont")
+                sub.set("face", sub_face)
+                sub.set("type", "TTF")
+                sub.set("isEmbedded", "0")
+                sub.set("binaryItemIDRef", "")
+        ff.set("fontCnt", "3")
     txt = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True).decode("utf-8")
     # 빨강(성품 강조)·파랑(본문표·공적요지·경력·공적사항 등 양식 sample) 글자색을 검정으로 통일
     for color in ("#FF0000", "#0000FF", "#2E74B5"):
@@ -711,6 +733,22 @@ def generate_merit_report_hwpx(
         ]
         return max(hs) if hs else 0
 
+    def _estimate_merit_height(tc) -> int:
+        """공적사항 셀의 실제 필요 높이(HWPUNIT) 추정 — 내용 길이 기반.
+
+        짧은/빈 공적사항이 페이지를 강제로 채워 2페이지로 넘치던 문제를 막기 위해,
+        내용에 맞는 높이를 계산한다. (13pt 기준 한 줄 ~38자, 줄높이 ~1700, 여백 포함)
+        """
+        LINE_H, CHARS_PER_LINE, MARGIN = 1700, 38, 2600
+        lines = 0
+        for p in tc.findall(".//hp:p", NS):
+            txt = "".join(t.text or "" for t in p.findall(".//hp:t", NS))
+            if not txt.strip():
+                lines += 1
+            else:
+                lines += -(-len(txt) // CHARS_PER_LINE)  # ceil
+        return MARGIN + max(lines, 1) * LINE_H
+
     # === (29)공적사항: 한 표 유지 + '글자처럼 취급' 해제 ===
     # 표를 글자처럼 취급(treatAsChar=1)하면 인라인 객체가 되어 셀 높이가 내용을
     # 따라가지 못하고 페이지 분할이 막혀 내용이 셀 밖으로 넘친다. treatAsChar=0 으로
@@ -738,11 +776,21 @@ def generate_merit_report_hwpx(
         for tc in rows[-2].findall("hp:tc", NS):
             tc.set("header", "1")  # (29)제목행을 표 제목줄로 → 페이지마다 반복
         other = sum(_row_height(r) for r in rows[:-1])
-        fill = max(0, PAGE_BODY_HEIGHT - other - SAFETY)
-        for cl in rows[-1].findall("hp:tc", NS):
+        cap = max(0, PAGE_BODY_HEIGHT - other - SAFETY)  # 현재 페이지 잔여(1페이지 한계)
+        last_cells = rows[-1].findall("hp:tc", NS)
+        needed = max((_estimate_merit_height(tc) for tc in last_cells), default=0)
+        # 내용이 짧으면 그 높이만큼만(페이지 넘김 방지), 길면 잔여를 채우고 내용 따라 분할.
+        # 단, 너무 납작해지지 않도록 최소 높이(MERIT_MIN_H) 보장.
+        MERIT_MIN_H = 12000
+        if needed <= cap:
+            target = max(needed, MERIT_MIN_H)
+            target = min(target, cap)  # 1페이지를 넘지 않음
+        else:
+            target = needed  # 긴 공적사항: pageBreak=CELL 로 자연 분할
+        for cl in last_cells:
             sz = cl.find("hp:cellSz", NS)
             if sz is not None:
-                sz.set("height", str(max(int(sz.get("height") or 0), fill)))
+                sz.set("height", str(target))
     # --- 현지조사 확인서([서식3])는 새 페이지에서 시작 ---
     P_TAG = "{http://www.hancom.co.kr/hwpml/2011/paragraph}p"
     for p in root.iter(P_TAG):
@@ -800,6 +848,9 @@ def generate_merit_report_hwpx(
 
     # --- (11)대외직명 각주 삭제 (표와 겹쳐 보임 — PDF미리보기/HWPX 모두 반영) ---
     _remove_external_title_footnote(root)
+
+    # --- 검토용 메모(주석, 작성자 USER 등) 제거 — 한글 PDF 변환 시 인쇄되지 않게 ---
+    _remove_memos(root)
 
     # --- (29)공적사항 셀 글자 13pt 고정용 charPr id 수집 ---
     merit_detail_charprs = set()
@@ -948,6 +999,32 @@ def _assert_merit_report_invariants(out_path, recipients, award_grade, inv) -> N
             raise RuntimeError(f"[하네스] {label} 입력 누락: 기대 '{exp}'")
 
 
+def _remove_memos(root) -> None:
+    """검토용 메모(주석)를 제거한다 — 한글에서 PDF로 변환하면 메모가 인쇄되어
+    공적조서 본문에 'USER … 광역지자치단체장 …' 같은 코멘트가 섞여 나오기 때문.
+
+    메모는 <hp:ctrl> 안의 <hp:fieldBegin type="MEMO">(내용 subList 포함)과 짝이 되는
+    <hp:fieldEnd beginIDRef=...>로 구성된다. 다중 대상자 복제로 같은 메모가 여러 번
+    들어갈 수 있으므로 모두 제거한다."""
+    ctrls = root.findall(".//hp:ctrl", NS)
+    memo_ids = set()
+    to_remove = []
+    for ctrl in ctrls:
+        fb = ctrl.find("hp:fieldBegin", NS)
+        if fb is not None and (fb.get("type") or "").upper() == "MEMO":
+            if fb.get("id"):
+                memo_ids.add(fb.get("id"))
+            to_remove.append(ctrl)
+    for ctrl in ctrls:
+        fe = ctrl.find("hp:fieldEnd", NS)
+        if fe is not None and fe.get("beginIDRef") in memo_ids:
+            to_remove.append(ctrl)
+    for ctrl in to_remove:
+        parent = ctrl.getparent()
+        if parent is not None:
+            parent.remove(ctrl)
+
+
 def _remove_external_title_footnote(root) -> None:
     """(11)대외직명 각주('* 대외직명란에는 … 표창장에 표시할 내용')를 제거.
     표와 겹쳐 보여 삭제 요청됨. 표 셀의 '(11)대외직명*' 라벨은 보존한다."""
@@ -987,6 +1064,7 @@ def _duplicate_overview_rows(t0, recipients, award_date_short: str) -> None:
     if len(rows) < 2:
         return
     data_row = rows[1]  # 첫 대상자 행
+    anchor = data_row  # 매 행을 직전 새 행 뒤에 삽입 → 물리 순서가 rowAddr와 일치
     for i, r in enumerate(recipients[1:], start=2):
         new_row = copy.deepcopy(data_row)
         for c in new_row.findall("hp:tc", NS):
@@ -1001,7 +1079,8 @@ def _duplicate_overview_rows(t0, recipients, award_date_short: str) -> None:
         _set_first_text(nc[4], r.merit_category or "")
         _set_first_text(nc[5], (r.merit_period or "").strip().replace(" ", ""))
         _set_first_text(nc[6], award_date_short)
-        data_row.addnext(new_row)
+        anchor.addnext(new_row)
+        anchor = new_row  # 다음 행은 이 행 뒤에 (역순 삽입 버그 수정)
     t0.set("rowCnt", str(1 + len(recipients)))
 
 
@@ -1540,6 +1619,9 @@ def generate_checklist_hwpx(case: AwardCase, recipient: Recipient) -> Path:
                 cl.admin_election_law_art112_note or "",
             ),
         )
+
+    # 검토용 메모(주석) 제거 — 한글 PDF 변환 시 인쇄 방지
+    _remove_memos(root)
 
     new_section = etree.tostring(
         root, xml_declaration=True, encoding="UTF-8", standalone=True

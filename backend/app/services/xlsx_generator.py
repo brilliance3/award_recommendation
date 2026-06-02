@@ -5,11 +5,12 @@
 from __future__ import annotations
 
 import re
+from copy import copy as _copy_style
 from datetime import date
 from pathlib import Path
 from typing import List
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
@@ -120,78 +121,65 @@ def generate_merit_overview_xlsx(case: AwardCase) -> Path:
     return file_path
 
 
-def generate_recipient_list_xlsx(case: AwardCase) -> Path:
-    """03. 표창대상자.xlsx 생성"""
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "표창대상자"
+# 사용자 정답 샘플(03 표창대상자)을 그대로 템플릿으로 사용 → 색·폰트·테두리·병합·
+# 너비 등 모든 서식을 100% 보존한다. 데이터(PII)는 비워둔 상태로 저장돼 있다.
+_RECIPIENT_TEMPLATE = (
+    Path(__file__).resolve().parent.parent / "templates" / "표창대상자_template.xlsx"
+)
 
-    # 가로로 긴 표 → 가로(landscape) 방향 + 너비를 한 페이지에 맞춤 (PDF 변환·인쇄 시)
-    ws.page_setup.orientation = "landscape"
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
-    ws.sheet_properties.pageSetUpPr.fitToPage = True
 
-    # 제목
-    year = (case.award_date.year if case.award_date else date.today().year)
-    title = f"{year}년도 {case.award_grade or '표창'} 추천자 명단"
-    ws.merge_cells("A1:N1")
-    ws["A1"] = title
-    ws["A1"].font = Font(size=14, bold=True)
-    ws["A1"].alignment = _CENTER
-    ws.row_dimensions[1].height = 28
-
-    # 상단 헤더 (행 2: 연번 / 추천자(B:D) / E:M 병합(빈) / 비고)
-    # — 샘플 파일과 동일한 병합 구조. 지역·주소·대상자 하위 헤더는 모두 행 3에 위치
-    ws.merge_cells("A2:A3")
-    ws["A2"] = "연번"
-    ws.merge_cells("B2:D2")
-    ws["B2"] = "추천자"
-    ws.merge_cells("E2:M2")
-    ws.merge_cells("N2:N3")
-    ws["N2"] = "비고"
-
-    subheaders = {
-        "B3": "소속",
-        "C3": "직위",
-        "D3": "성명",
-        "E3": "지역",
-        "F3": "주소",
-        "G3": "소속",
-        "H3": "직위및직명",
-        "I3": "성명",
-        "J3": "생년월일\n(6자리)",
-        "K3": "공적분야",
-        "L3": "공적기간",
-        "M3": "표창일",
-    }
-    for k, v in subheaders.items():
-        ws[k] = v
-
+def _clone_row_style(ws, src_row: int, dst_row: int) -> None:
+    """src_row 각 셀의 서식(폰트·채움·테두리·정렬·표시형식·행높이)을 dst_row로 복제."""
     for col in range(1, 15):
-        for row in (2, 3):
-            cell = ws.cell(row=row, column=col)
-            cell.font = Font(bold=True)
-            cell.alignment = _CENTER
-            cell.fill = _HDR_FILL
-            cell.border = _BORDER
-    ws.row_dimensions[2].height = 22
-    ws.row_dimensions[3].height = 28
+        s = ws.cell(row=src_row, column=col)
+        d = ws.cell(row=dst_row, column=col)
+        d.font = _copy_style(s.font)
+        d.fill = _copy_style(s.fill)
+        d.border = _copy_style(s.border)
+        d.alignment = _copy_style(s.alignment)
+        d.number_format = s.number_format
+    if ws.row_dimensions[src_row].height:
+        ws.row_dimensions[dst_row].height = ws.row_dimensions[src_row].height
 
-    widths = [5, 14, 10, 10, 8, 28, 18, 14, 10, 12, 16, 10, 12, 16]
-    for i, w in enumerate(widths, start=1):
-        ws.column_dimensions[get_column_letter(i)].width = w
 
-    row = 4
-    for r in case.recipients or []:
-        award_dt = case.award_date  # date 객체 — 엑셀에서 날짜 셀로 표시
-        # 추천자 소속·직위는 case에 저장된 값(설정 탭에서 정해짐) 사용
+def _recipient_list_title(year: int, award_grade: str | None) -> str:
+    return f"{year}년도 {award_grade or '표창'} 추천자 명단"
+
+
+def generate_recipient_list_template_xlsx(
+    award_grade: str = "경기도의회 의장 표창", empty_rows: int = 15
+) -> Path:
+    """빈 표창대상자 업로드 서식 — 샘플 템플릿 서식 그대로, 빈 입력 행 N개."""
+    wb = load_workbook(_RECIPIENT_TEMPLATE)
+    ws = wb.active
+    ws["A1"] = _recipient_list_title(date.today().year, award_grade)
+    # 행4(스타일 보존된 빈 행) 기준으로 빈 입력 행 확장
+    for row in range(5, 4 + max(1, empty_rows)):
+        _clone_row_style(ws, 4, row)
+    file_path = GENERATED_DIR / "표창대상자_업로드서식.xlsx"
+    wb.save(file_path)
+    return file_path
+
+
+def generate_recipient_list_xlsx(case: AwardCase) -> Path:
+    """03. 표창대상자.xlsx — 샘플 템플릿 서식 그대로 데이터만 채움."""
+    wb = load_workbook(_RECIPIENT_TEMPLATE)
+    ws = wb.active
+    year = case.award_date.year if case.award_date else date.today().year
+    ws["A1"] = _recipient_list_title(year, case.award_grade)
+
+    recipients: List[Recipient] = list(case.recipients or [])
+    for i, r in enumerate(recipients):
+        row = 4 + i
+        if row > 4:  # 둘째 대상자부터: 행4 서식을 복제
+            _clone_row_style(ws, 4, row)
+        award_dt = case.award_date  # date 객체 (템플릿 M열 표시형식 그대로)
         recommender_dept = case.recommender_department or ""
         recommender_pos = case.recommender_position or "위원"
         region = r.region or _extract_region_from_address(r.address)
         birth_yymmdd = r.birth_yymmdd or _yymmdd_from_birth_date(r.birth_date)
         values = [
-            r.sequence_no or row - 3,
+            r.sequence_no or i + 1,
             recommender_dept,
             recommender_pos,
             case.recommender_name or "",
@@ -207,13 +195,7 @@ def generate_recipient_list_xlsx(case: AwardCase) -> Path:
             r.note or "",
         ]
         for col, v in enumerate(values, start=1):
-            cell = ws.cell(row=row, column=col, value=v)
-            cell.alignment = _CENTER if col != 6 else _LEFT
-            cell.border = _BORDER
-            if col == 13 and award_dt:
-                cell.number_format = "yyyy-mm-dd"
-        ws.row_dimensions[row].height = 24
-        row += 1
+            ws.cell(row=row, column=col, value=v)
 
     # 파일명 규칙: 03. 표창대상자(000 의원 추천_홍길동 등 N인).xlsx
     recommender = case.recommender_name or "추천자"

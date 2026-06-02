@@ -22,7 +22,7 @@ PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
 _CACHE_DIR = PREVIEW_DIR / "cache"
 _CACHE_DIR.mkdir(parents=True, exist_ok=True)
 # 렌더 방식이 바뀌면(폰트 임베드 추가 등) 이 값을 올려 옛 캐시를 무효화한다.
-_RENDER_VERSION = "2026-06-02-single-render-nsids"
+_RENDER_VERSION = "2026-06-02-batang-regular-face"
 
 
 def convert_to_pdf_cached(src_path: Path, engine: str = "soffice") -> Path:
@@ -171,9 +171,14 @@ def _font_face_css() -> str:
     import base64
 
     # (요청 패밀리명, weight, 파일)
+    # ' Regular' 접미사 포함명: header.xml 폰트 테이블이 id0을 '경기천년바탕 Regular'로
+    # 두므로 rhwp SVG가 그 이름을 그대로 요청한다 → 동일 OTF로 바인딩해야 폰트 미설치
+    # 서버에서도 Noto 폴백 없이 렌더된다.
     faces = [
         ("경기천년바탕", "normal", "경기천년바탕OTF_Regular.otf"),
         ("경기천년바탕", "bold", "경기천년바탕OTF_Bold.otf"),
+        ("경기천년바탕 Regular", "normal", "경기천년바탕OTF_Regular.otf"),
+        ("경기천년바탕 Regular", "bold", "경기천년바탕OTF_Bold.otf"),
         ("경기천년제목", "normal", "경기천년제목OTF_Medium.otf"),
         ("경기천년제목", "bold", "경기천년제목OTF_Bold.otf"),
     ]
