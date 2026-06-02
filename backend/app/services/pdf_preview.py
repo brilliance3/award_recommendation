@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import subprocess
+import uuid
 from pathlib import Path
 
 from ..config import GENERATED_DIR
@@ -20,7 +22,7 @@ PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
 _CACHE_DIR = PREVIEW_DIR / "cache"
 _CACHE_DIR.mkdir(parents=True, exist_ok=True)
 # 렌더 방식이 바뀌면(폰트 임베드 추가 등) 이 값을 올려 옛 캐시를 무효화한다.
-_RENDER_VERSION = "2026-06-02-perpage-firstpage"
+_RENDER_VERSION = "2026-06-02-single-render-nsids"
 
 
 def convert_to_pdf_cached(src_path: Path, engine: str = "soffice") -> Path:
@@ -44,6 +46,11 @@ def convert_to_pdf_cached(src_path: Path, engine: str = "soffice") -> Path:
     out = convert_to_pdf_rhwp(src_path) if engine == "rhwp" else convert_to_pdf(src_path)
     try:
         shutil.copyfile(out, cached)
+        if out != cached:
+            try:
+                out.unlink(missing_ok=True)
+            except Exception:
+                pass
         return cached
     except Exception:
         return out  # 캐시 복사 실패 시 원본 반환
@@ -120,33 +127,34 @@ def convert_to_pdf_rhwp(src_path: Path) -> Path:
     if not RENDER_SCRIPT.exists():
         raise RuntimeError(f"렌더 스크립트를 찾을 수 없습니다: {RENDER_SCRIPT}")
 
-    # 미리보기 전용 장평 보정본 생성(원본 불변)
-    ratio_hwpx = PREVIEW_DIR / (src_path.stem + "_preview.hwpx")
-    _apply_preview_ratio(src_path, ratio_hwpx)
+    token = uuid.uuid4().hex[:8]
+    ratio_hwpx = PREVIEW_DIR / f"{src_path.stem}_{token}_preview.hwpx"
+    svg_dir = PREVIEW_DIR / f"{src_path.stem}_{token}_svg"
+    pdf_path = PREVIEW_DIR / f"{src_path.stem}_{token}.pdf"
+    try:
+        # 미리보기 전용 장평 보정본 생성(원본 불변)
+        _apply_preview_ratio(src_path, ratio_hwpx)
 
-    svg_dir = PREVIEW_DIR / (src_path.stem + "_svg")
-    if svg_dir.exists():
-        shutil.rmtree(svg_dir, ignore_errors=True)
-    result = subprocess.run(
-        [NODE_BIN, str(RENDER_SCRIPT), str(ratio_hwpx), str(svg_dir)],
-        capture_output=True,
-        text=True,
-        timeout=120,
-        cwd=str(RENDER_SCRIPT.parent),
-    )
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"rhwp 렌더 실패: {result.stderr or result.stdout or '(no output)'}"
+        result = subprocess.run(
+            [NODE_BIN, str(RENDER_SCRIPT), str(ratio_hwpx), str(svg_dir)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=str(RENDER_SCRIPT.parent),
         )
-    svgs = sorted(svg_dir.glob("page_*.svg"))
-    if not svgs:
-        raise RuntimeError("rhwp가 렌더한 페이지가 없습니다")
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"rhwp 렌더 실패: {result.stderr or result.stdout or '(no output)'}"
+            )
+        svgs = sorted(svg_dir.glob("page_*.svg"))
+        if not svgs:
+            raise RuntimeError("rhwp가 렌더한 페이지가 없습니다")
 
-    pdf_path = PREVIEW_DIR / (src_path.stem + ".pdf")
-    _svgs_to_pdf(svgs, pdf_path)
-    shutil.rmtree(svg_dir, ignore_errors=True)
-    ratio_hwpx.unlink(missing_ok=True)  # 미리보기 임시 HWPX 정리
-    return pdf_path
+        _svgs_to_pdf(svgs, pdf_path)
+        return pdf_path
+    finally:
+        shutil.rmtree(svg_dir, ignore_errors=True)
+        ratio_hwpx.unlink(missing_ok=True)  # 미리보기 임시 HWPX 정리
 
 
 _FONTS_DIR = Path(__file__).resolve().parents[2] / "render" / "fonts"
@@ -216,64 +224,72 @@ def pdf_page_png(pdf_path: Path, page_index: int, scale: float = 2.0) -> bytes:
         doc.close()
 
 
-def _page_html(svg_text: str) -> str:
-    """SVG 한 장을 페이지 크기에 맞춰 렌더하는 HTML(경기천년체 임베드 포함)."""
+def _namespace_svg_ids(svg_text: str, idx: int) -> str:
+    """여러 SVG를 한 DOM에 넣을 때 clipPath/filter id 충돌이 없도록 접두사를 붙인다."""
+    prefix = f"p{idx}_"
+    svg_text = re.sub(
+        r'id="([^"]+)"',
+        lambda m: f'id="{prefix}{m.group(1)}"',
+        svg_text,
+    )
+    svg_text = re.sub(
+        r"url\(#([^)]+)\)",
+        lambda m: f"url(#{prefix}{m.group(1)})",
+        svg_text,
+    )
+    return re.sub(
+        r'href="#([^"]+)"',
+        lambda m: f'href="#{prefix}{m.group(1)}"',
+        svg_text,
+    )
+
+
+def _combined_html(svgs) -> str:
+    """페이지 SVG 전체를 한 번에 인쇄할 HTML(경기천년체 임베드 1회)."""
+    pages = []
+    for idx, svg in enumerate(svgs, start=1):
+        svg_text = svg.read_text(encoding="utf-8")
+        pages.append(f'<div class="page">{_namespace_svg_ids(svg_text, idx)}</div>')
     return (
         '<!doctype html><html><head><meta charset="utf-8"><style>'
         + _font_face_css()  # 경기천년체를 직접 임베드 (시스템 폰트명 매칭 의존 제거)
+        + f"@page{{size:{_PAGE_W_PX}px {_PAGE_H_PX}px;margin:0;}}"
         + "*{margin:0;padding:0;box-sizing:border-box;}html,body{background:#fff;}"
         f".page{{width:{_PAGE_W_PX}px;height:{_PAGE_H_PX}px;overflow:hidden;}}"
+        ".page + .page{break-before:page;}"
         f"svg{{display:block;width:{_PAGE_W_PX}px;height:{_PAGE_H_PX}px;}}"
         "</style></head><body>"
-        f'<div class="page">{svg_text}</div></body></html>'
+        + "".join(pages)
+        + "</body></html>"
     )
 
 
 def _svgs_to_pdf(svgs, pdf_path: Path) -> None:
     """페이지 SVG들을 A4 PDF로 합친다(벡터, 텍스트 보존).
 
-    **주의**: chromium page.pdf()에 SVG 여러 장을 한 HTML(page-break)로 넣어 한 번에
-    인쇄하면 일부 셀 텍스트((2)생년월일·(8)소속 등)가 누락되는 버그가 있다(화면 렌더는
-    정상). 페이지를 '한 장씩' 따로 인쇄하면 누락이 없으므로, 페이지별 1장 PDF를 만든 뒤
-    pypdf로 병합한다. 벡터+텍스트가 보존돼 도장((인) 텍스트 탐지)도 정상 동작한다.
+    rhwp SVG는 페이지마다 같은 clipPath/filter id를 재사용한다. 여러 SVG를 한 HTML에
+    넣기 전에 페이지별 접두사를 붙여 id/url(#id)/href="#id" 참조 충돌을 막는다.
     """
-    from io import BytesIO
-
     from playwright.sync_api import sync_playwright
-    from pypdf import PdfReader, PdfWriter
 
-    page_pdfs = []
+    html = _combined_html(svgs)
     with sync_playwright() as p:
         browser = p.chromium.launch()
         try:
             page = browser.new_page()
-            for s in svgs:
-                page.set_content(
-                    _page_html(s.read_text(encoding="utf-8")), wait_until="networkidle"
+            page.set_default_timeout(60000)
+            page.set_content(html, wait_until="load")
+            # 임베드 경기천년체 로드 완료까지 대기(미완 시 fallback 박힘 방지)
+            try:
+                page.wait_for_function(
+                    "document.fonts.status === 'loaded'", timeout=10000
                 )
-                # 임베드 경기천년체 로드 완료까지 대기(미완 시 fallback 박힘 방지)
-                try:
-                    page.wait_for_function(
-                        "document.fonts.status === 'loaded'", timeout=10000
-                    )
-                except Exception:
-                    page.wait_for_timeout(1500)
-                page_pdfs.append(
-                    page.pdf(prefer_css_page_size=True, print_background=True)
-                )
+            except Exception:
+                page.wait_for_timeout(1000)
+            pdf_bytes = page.pdf(prefer_css_page_size=True, print_background=True)
         finally:
             browser.close()
-    if not page_pdfs:
-        raise RuntimeError("미리보기 페이지 렌더 결과가 없습니다")
-    writer = PdfWriter()
-    for buf in page_pdfs:
-        reader = PdfReader(BytesIO(buf))
-        # SVG 1장 = 페이지 1장. 내용이 CSS @page보다 미세히 넘쳐 생기는 빈 2번째
-        # 페이지는 버리고 첫 페이지만 사용한다(페이지 수 2배 방지).
-        if reader.pages:
-            writer.add_page(reader.pages[0])
-    with open(pdf_path, "wb") as f:
-        writer.write(f)
+    pdf_path.write_bytes(pdf_bytes)
 
 
 def convert_to_pdf(src_path: Path) -> Path:

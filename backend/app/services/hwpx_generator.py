@@ -450,18 +450,12 @@ def _needed_line_count(p, tc, text: str, charpr_heights: dict) -> int:
 
 
 def _strip_linesegarray(section_bytes: bytes, charpr_heights: dict = None) -> bytes:
-    """section0.xml에서 '텍스트가 있는' 문단의 linesegarray(줄 위치 캐시)만 제거.
+    """section0.xml에서 텍스트가 있는 문단의 linesegarray(줄 위치 캐시)를 제거.
 
-    양식 sample 기준으로 계산된 lineseg가 남아 있으면 한글이 긴 텍스트를 그 줄 수에
-    맞추려고 자간을 압축한다. 텍스트가 바뀐 문단에서 제거하면 한글/LibreOffice가
-    실제 텍스트로 줄을 다시 계산해 자간 압축 대신 줄바꿈한다.
-
-    단, 빈 문단(텍스트 없는 셀 — 주요경력·과거표창 입력행 등)의 lineseg는 보존한다.
-    제거하면 LibreOffice가 빈 셀 높이를 최소로 압축해 양식 sample 대비 표 레이아웃이
-    무너진다(빈 입력행이 납작해지고 (29)공적사항 위쪽 표가 찌그러짐).
+    한컴 개발자포럼 권장: 텍스트 수정 문단의 hp:linesegarray는 stale 캐시가 되므로 제거한다.
+    빈 문단 캐시는 빈 입력행 높이 유지를 위해 보존한다.
     """
     LSA = "{http://www.hancom.co.kr/hwpml/2011/paragraph}linesegarray"
-    LS = "{http://www.hancom.co.kr/hwpml/2011/paragraph}lineseg"
     T = "{http://www.hancom.co.kr/hwpml/2011/paragraph}t"
     try:
         root = etree.fromstring(section_bytes)
@@ -475,30 +469,8 @@ def _strip_linesegarray(section_bytes: bytes, charpr_heights: dict = None) -> by
         text = "".join(t.text or "" for t in parent.iter(T))
         if not text.strip():
             continue  # 빈 문단 보존
-        in_tbl = False
-        tc = None
-        anc = parent.getparent()
-        while anc is not None:
-            ln = etree.QName(anc.tag).localname
-            if ln == "tc" and tc is None:
-                tc = anc
-            if ln == "tbl":
-                in_tbl = True
-                break
-            anc = anc.getparent()
-        if not in_tbl:
-            parent.remove(lsa)  # 표 밖: 제거(rhwp가 본문을 정확히 재배치)
-            removed = True
-            continue
-        # 짧은 셀(헤더·고정 라벨 등 20자 이하)은 보존 — measure 오차로 줄바꿈 오판되어
-        # 멀쩡한 헤더가 2줄로 깨지는 것을 막는다. 자간 압축은 긴 본문 셀에서만 문제.
-        existing = len(lsa.findall(LS))
-        if (
-            len(text.strip()) > 20
-            and _needed_line_count(parent, tc, text, charpr_heights) > existing
-        ):
-            parent.remove(lsa)  # 표 안 긴 셀: 제거(rhwp가 내용대로 재배치)
-            removed = True
+        parent.remove(lsa)
+        removed = True
     if not removed:
         return section_bytes
     return etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
@@ -519,9 +491,7 @@ def _save_hwpx(
     normalize_fonts=True이면 header.xml 폰트를 경기천년체로 정규화 (PDF 변환용).
     spacing_para_ids가 주어지면 해당 본문 paraPr의 단락 여백·행간을 늘려 서식을 여유롭게.
     apply_report_layout=True이면 02 공적조서 전용 정렬 paraPr(73/74) 생성·59 정렬 적용."""
-    # 자간 압축 방지 — linesegarray(양식 sample 기준 줄 캐시)를 선별 제거하면 렌더 엔진이
-    # 실제 텍스트로 줄을 재계산한다. 표 안 짧은 셀의 캐시는 보존해 rhwp 미리보기에서 표
-    # 행 높이가 유지되게 한다(글자 높이 맵 기준으로 긴 셀만 제거). [_strip_linesegarray]
+    # 한컴 stale 줄 캐시 경고 방지 — 텍스트가 있는 문단의 linesegarray만 제거하고 빈 문단 캐시는 보존한다.
     with zipfile.ZipFile(template_path, "r") as ztmp:
         _hdr_bytes = ztmp.read("Contents/header.xml")
     new_section = _strip_linesegarray(new_section, _charpr_heights(_hdr_bytes))
