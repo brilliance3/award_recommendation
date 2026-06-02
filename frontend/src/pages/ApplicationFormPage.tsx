@@ -11,6 +11,7 @@ import Field, { Button, Input, TextArea } from "../components/Field";
 import DateInput from "../components/DateInput";
 import AwardSheetPreview from "../components/AwardSheetPreview";
 import PublicLayout from "../components/PublicLayout";
+import ShareLinkBox from "../components/ShareLinkBox";
 
 // 신청 폼 임시저장 키 (브라우저 localStorage)
 const DRAFT_KEY = "apply_draft_v1";
@@ -35,7 +36,7 @@ interface PreviousAwardRow {
   description: string;
 }
 
-interface RecipientFormData {
+export interface RecipientFormData {
   recipient_name: string;
   chinese_name: string;
   birth_date: string;
@@ -69,7 +70,7 @@ interface RecipientFormData {
   previous_awards: PreviousAwardRow[];
 }
 
-function emptyRecipient(): RecipientFormData {
+export function emptyRecipient(): RecipientFormData {
   return {
     recipient_name: "",
     chinese_name: "",
@@ -101,7 +102,7 @@ function emptyRecipient(): RecipientFormData {
   };
 }
 
-function isMeritPeriodAtLeast2Years(value: string): boolean {
+export function isMeritPeriodAtLeast2Years(value: string): boolean {
   const v = value.trim();
   if (!v) return false;
   const y = v.match(/(\d+)\s*년/);
@@ -110,6 +111,94 @@ function isMeritPeriodAtLeast2Years(value: string): boolean {
   const months = m ? parseInt(m[1], 10) : 0;
   if (!y && !m) return false;
   return years * 12 + months >= 24;
+}
+
+// 단일 대상자 유효성 검증 (신청 폼 모달·공유 URL 자가추가 공용)
+export function validateRecipient(r: RecipientFormData): string | null {
+  const missing: string[] = [];
+  if (!r.organization_name.trim()) missing.push("단체명");
+  if (!r.recipient_name.trim()) missing.push("성명");
+  if (!r.birth_date) missing.push("생년월일");
+  if (!r.gender) missing.push("성별");
+  if (!r.address.trim()) missing.push("주소");
+  if (!r.merit_category) missing.push("공적분야");
+  if (!r.merit_period.trim()) missing.push("공적기간");
+  if (!r.recommendation_reason.trim()) missing.push("추천사유");
+  if (!r.merit_short_summary.trim()) missing.push("공적요지");
+  if (!r.full_merit_text.trim()) missing.push("공적사항 본문");
+  if (missing.length) return `필수 항목 누락: ${missing.join(", ")}`;
+  if (!isMeritPeriodAtLeast2Years(r.merit_period))
+    return "공적기간은 2년 이상이어야 합니다.";
+  const unanswered = CHECKLIST_ITEMS.filter(it => !r.cl_status[it.key]);
+  if (unanswered.length)
+    return `체크리스트 미응답: ${unanswered.map(it => it.label).join(", ")}`;
+  if (!r.cl_confirm_name.trim() || !r.cl_confirm_birth)
+    return "체크리스트 본인 확인(성명·생년월일)이 비어 있습니다.";
+  if (r.cl_confirm_name.trim() !== r.recipient_name.trim())
+    return "체크리스트 본인 확인 이름이 기본정보의 성명과 일치하지 않습니다.";
+  if (r.cl_confirm_birth !== r.birth_date)
+    return "체크리스트 본인 확인 생년월일이 기본정보와 일치하지 않습니다.";
+  return null;
+}
+
+// RecipientFormData → 서버 제출 페이로드(ApplicationRecipient) 변환 (공용)
+export function toApplicationRecipient(r: RecipientFormData): ApplicationRecipient {
+  return {
+    recipient_name: r.recipient_name.trim(),
+    chinese_name: r.chinese_name.trim() || undefined,
+    birth_date: r.birth_date,
+    gender: r.gender || undefined,
+    address: r.address.trim() || undefined,
+    region: r.region.trim() || undefined,
+    occupation: r.occupation.trim() || undefined,
+    organization_name: r.organization_name.trim(),
+    recipient_position_title: r.recipient_position_title.trim() || undefined,
+    rank_grade: r.rank_grade.trim() || undefined,
+    external_title: r.external_title.trim() || undefined,
+    merit_category: r.merit_category,
+    merit_period: r.merit_period.trim(),
+    checklist: {
+      item_service_period: r.cl_status.service_period!,
+      item_service_period_note: r.cl_note.service_period,
+      item_prior_award: r.cl_status.prior_award!,
+      item_prior_award_note: r.cl_note.prior_award,
+      item_discipline: r.cl_status.discipline!,
+      item_discipline_note: r.cl_note.discipline,
+      item_investigation: r.cl_status.investigation!,
+      item_investigation_note: r.cl_note.investigation,
+      item_criminal: r.cl_status.criminal!,
+      item_criminal_note: r.cl_note.criminal,
+      item_arrears: r.cl_status.arrears!,
+      item_arrears_note: r.cl_note.arrears,
+      item_misconduct: r.cl_status.misconduct!,
+      item_misconduct_note: r.cl_note.misconduct,
+      item_award_revoked: r.cl_status.award_revoked!,
+      item_award_revoked_note: r.cl_note.award_revoked,
+      self_confirm_name: r.cl_confirm_name.trim(),
+      self_confirm_birth: r.cl_confirm_birth,
+    },
+    merit_content: {
+      merit_short_summary: r.merit_short_summary.trim() || undefined,
+      recommendation_reason: r.recommendation_reason.trim() || undefined,
+      merit_overview_1: r.merit_overview_1.trim() || undefined,
+      merit_overview_2: r.merit_overview_2.trim() || undefined,
+      merit_overview_3: r.merit_overview_3.trim() || undefined,
+      merit_overview_4: r.merit_overview_4.trim() || undefined,
+      full_merit_text: r.full_merit_text.trim() || undefined,
+    },
+    careers: (r.careers || [])
+      .map(c => ({
+        record_date: c.record_date.trim(),
+        description: c.description.trim(),
+      }))
+      .filter(c => c.record_date || c.description),
+    previous_awards: (r.previous_awards || [])
+      .map(p => ({
+        award_date: p.award_date.trim(),
+        description: p.description.trim(),
+      }))
+      .filter(p => p.award_date || p.description),
+  };
 }
 
 export default function ApplicationFormPage() {
@@ -124,10 +213,14 @@ export default function ApplicationFormPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // 기관 대표 신청 제출 후 발급되는 관리 토큰(검토·제출). 대상자 추가 링크는 관리 화면에서 복사.
+  const [manageToken, setManageToken] = useState<string | null>(null);
 
   // 모달 상태: null=닫힘, -1=새 추가, 0+=기존 인덱스 편집
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingDraft, setEditingDraft] = useState<RecipientFormData | null>(null);
+  // 모달 위저드 마지막 단계 도달 여부 — '완료'는 그때만 활성화
+  const [modalAtLast, setModalAtLast] = useState(false);
 
   // 추천의원 목록 (드롭다운 선택용)
   const [legislators, setLegislators] = useState<Legislator[]>([]);
@@ -316,44 +409,25 @@ export default function ApplicationFormPage() {
     setRecipients(prev => prev.filter((_, i) => i !== idx));
   };
 
-  // 단일 대상자 유효성 검증 (모달 저장 시 사용)
-  const validateRecipient = (r: RecipientFormData): string | null => {
-    const missing: string[] = [];
-    if (!r.organization_name.trim()) missing.push("단체명");
-    if (!r.recipient_name.trim()) missing.push("성명");
-    if (!r.birth_date) missing.push("생년월일");
-    if (!r.gender) missing.push("성별");
-    if (!r.address.trim()) missing.push("주소");
-    if (!r.recipient_position_title.trim()) missing.push("직위");
-    if (!r.merit_category) missing.push("공적분야");
-    if (!r.merit_period.trim()) missing.push("공적기간");
-    if (!r.recommendation_reason.trim()) missing.push("추천사유");
-    if (!r.merit_short_summary.trim()) missing.push("공적요지");
-    if (!r.full_merit_text.trim()) missing.push("공적사항 본문");
-    if (missing.length) return `필수 항목 누락: ${missing.join(", ")}`;
-    if (!isMeritPeriodAtLeast2Years(r.merit_period))
-      return "공적기간은 2년 이상이어야 합니다.";
-    const unanswered = CHECKLIST_ITEMS.filter(it => !r.cl_status[it.key]);
-    if (unanswered.length)
-      return `체크리스트 미응답: ${unanswered.map(it => it.label).join(", ")}`;
-    if (!r.cl_confirm_name.trim() || !r.cl_confirm_birth)
-      return "체크리스트 본인 확인(성명·생년월일)이 비어 있습니다.";
-    if (r.cl_confirm_name.trim() !== r.recipient_name.trim())
-      return "체크리스트 본인 확인 이름이 기본정보의 성명과 일치하지 않습니다.";
-    if (r.cl_confirm_birth !== r.birth_date)
-      return "체크리스트 본인 확인 생년월일이 기본정보와 일치하지 않습니다.";
-    return null;
-  };
 
   const validate = (): string | null => {
     if (!applicantName.trim()) return "신청자 이름을 입력해 주세요.";
     if (applicantRole === "organization" && !applicantOrg.trim())
       return "기관 신청은 단체명이 필요합니다.";
+    // 기관 대표 신청은 연락처 필수
+    if (applicantRole === "organization" && !applicantContact.trim())
+      return "기관 대표 신청은 연락처(이메일 또는 전화번호)가 필요합니다.";
+    // 희망 등기수령 주소는 개인·기관 공통 필수
+    if (!applicantDeliveryAddress.trim())
+      return "희망 등기수령 주소를 입력해 주세요.";
     if (!recommenderName.trim())
       return "추천의원 성명을 입력해 주세요.";
-    if (awardDate && awardDate < todayIso())
+    if (!awardDate)
+      return "희망 표창일을 입력해 주세요.";
+    if (awardDate < todayIso())
       return "희망 표창일은 오늘 이후의 날짜여야 합니다.";
-    if (recipients.length === 0)
+    // 개인 신청은 본인 1명 이상 필수. 기관 대표 신청은 0명도 허용(공유 URL로 대상자가 직접 추가).
+    if (applicantRole === "individual" && recipients.length === 0)
       return "추천대상자를 1명 이상 추가해 주세요.";
     for (let i = 0; i < recipients.length; i++) {
       const err = validateRecipient(recipients[i]);
@@ -379,67 +453,13 @@ export default function ApplicationFormPage() {
       applicant_delivery_address: applicantDeliveryAddress.trim() || undefined,
       recommender_name: recommenderName.trim(),
       award_date: awardDate || undefined,
-      recipients: recipients.map<ApplicationRecipient>(r => ({
-        recipient_name: r.recipient_name.trim(),
-        chinese_name: r.chinese_name.trim() || undefined,
-        birth_date: r.birth_date,
-        gender: r.gender || undefined,
-        address: r.address.trim() || undefined,
-        region: r.region.trim() || undefined,
-        occupation: r.occupation.trim() || undefined,
-        organization_name: r.organization_name.trim(),
-        recipient_position_title: r.recipient_position_title.trim(),
-        rank_grade: r.rank_grade.trim() || undefined,
-        external_title: r.external_title.trim() || undefined,
-        merit_category: r.merit_category,
-        merit_period: r.merit_period.trim(),
-        checklist: {
-          item_service_period: r.cl_status.service_period!,
-          item_service_period_note: r.cl_note.service_period,
-          item_prior_award: r.cl_status.prior_award!,
-          item_prior_award_note: r.cl_note.prior_award,
-          item_discipline: r.cl_status.discipline!,
-          item_discipline_note: r.cl_note.discipline,
-          item_investigation: r.cl_status.investigation!,
-          item_investigation_note: r.cl_note.investigation,
-          item_criminal: r.cl_status.criminal!,
-          item_criminal_note: r.cl_note.criminal,
-          item_arrears: r.cl_status.arrears!,
-          item_arrears_note: r.cl_note.arrears,
-          item_misconduct: r.cl_status.misconduct!,
-          item_misconduct_note: r.cl_note.misconduct,
-          item_award_revoked: r.cl_status.award_revoked!,
-          item_award_revoked_note: r.cl_note.award_revoked,
-          self_confirm_name: r.cl_confirm_name.trim(),
-          self_confirm_birth: r.cl_confirm_birth,
-        },
-        merit_content: {
-          merit_short_summary: r.merit_short_summary.trim() || undefined,
-          recommendation_reason: r.recommendation_reason.trim() || undefined,
-          merit_overview_1: r.merit_overview_1.trim() || undefined,
-          merit_overview_2: r.merit_overview_2.trim() || undefined,
-          merit_overview_3: r.merit_overview_3.trim() || undefined,
-          merit_overview_4: r.merit_overview_4.trim() || undefined,
-          full_merit_text: r.full_merit_text.trim() || undefined,
-        },
-        careers: r.careers
-          .map(c => ({
-            record_date: c.record_date.trim(),
-            description: c.description.trim(),
-          }))
-          .filter(c => c.record_date || c.description),
-        previous_awards: r.previous_awards
-          .map(p => ({
-            award_date: p.award_date.trim(),
-            description: p.description.trim(),
-          }))
-          .filter(p => p.award_date || p.description),
-      })),
+      recipients: recipients.map(toApplicationRecipient),
     };
 
     setSubmitting(true);
     try {
-      await submitApplication(payload);
+      const res = await submitApplication(payload);
+      setManageToken(res.manage_token || null);
       clearDraft(); // 제출 완료 → 임시저장 삭제
       setSubmitted(true);
     } catch (err: any) {
@@ -454,20 +474,49 @@ export default function ApplicationFormPage() {
   };
 
   if (submitted) {
+    const isOrgShare = applicantRole === "organization" && manageToken;
     return (
       <PublicLayout>
         <div className="max-w-2xl mx-auto">
-          <div className="krds-card krds-card-pad border-success-500/40 bg-success-50 text-center py-10">
-            <div className="text-3xl mb-3">✅</div>
-            <h1 className="text-xl font-bold text-success-600 mb-2">
-              신청이 접수되었습니다
-            </h1>
-            <p className="text-sm text-ink-700 leading-relaxed">
-              제출하신 내용은 경기도의회 보건복지위원회 전문위원실에서 검토 후
-              표창 추천 절차에 반영됩니다. 추가 확인이 필요한 경우 신청자
-              연락처로 연락드릴 수 있습니다.
-            </p>
-          </div>
+          {isOrgShare ? (
+            <div className="krds-card krds-card-pad border-success-500/40 bg-success-50">
+              <div className="text-center">
+                <div className="text-3xl mb-2">✅</div>
+                <h1 className="text-xl font-bold text-success-600 mb-1">
+                  신청이 생성되었습니다 (아직 최종 제출 전)
+                </h1>
+                <p className="text-sm text-ink-700 leading-relaxed">
+                  아래 <strong>검토·제출 관리 링크</strong>를 꼭 보관하세요. 이
+                  링크에서 <strong>대상자 추가 링크를 복사해 각 대상자에게 배포</strong>
+                  하고, 대상자가 모두 모이면 검토 후 <strong>최종 제출</strong>하세요.
+                </p>
+                <p className="text-xs text-danger-600 mt-1">
+                  ※ 최종 제출 전까지는 표창 담당자에게 보이지 않습니다.
+                </p>
+              </div>
+              <ShareLinkBox token={manageToken!} basePath="/apply/manage" />
+              <div className="mt-3 text-center">
+                <a
+                  href={`/apply/manage/${manageToken}`}
+                  className="inline-block rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
+                >
+                  검토·제출 화면 열기 →
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div className="krds-card krds-card-pad border-success-500/40 bg-success-50 text-center py-10">
+              <div className="text-3xl mb-3">✅</div>
+              <h1 className="text-xl font-bold text-success-600 mb-2">
+                신청이 접수되었습니다
+              </h1>
+              <p className="text-sm text-ink-700 leading-relaxed">
+                제출하신 내용은 경기도의회 보건복지위원회 전문위원실에서 검토 후
+                표창 추천 절차에 반영됩니다. 추가 확인이 필요한 경우 신청자
+                연락처로 연락드릴 수 있습니다.
+              </p>
+            </div>
+          )}
         </div>
       </PublicLayout>
     );
@@ -570,13 +619,17 @@ export default function ApplicationFormPage() {
                 />
               </Field>
             )}
-            <Field label="연락처" hint="이메일 또는 전화번호">
+            <Field
+              label="연락처"
+              required={applicantRole === "organization"}
+              hint="이메일 또는 전화번호"
+            >
               <Input
                 value={applicantContact}
                 onChange={e => setApplicantContact(e.target.value)}
               />
             </Field>
-            <Field label="희망 표창일" hint="숫자만 입력하면 자동 정렬됩니다. 신청일 이후의 날짜여야 합니다.">
+            <Field label="희망 표창일" required hint="숫자만 입력하면 자동 정렬됩니다. 신청일 이후의 날짜여야 합니다.">
               <DateInput
                 value={awardDate}
                 onChange={setAwardDate}
@@ -588,6 +641,7 @@ export default function ApplicationFormPage() {
           </div>
           <Field
             label="희망 등기수령 주소"
+            required
             hint="표창장·관련 서류를 받으실 주소"
           >
             <Input
@@ -631,7 +685,8 @@ export default function ApplicationFormPage() {
           </Field>
         </section>
 
-        {/* 대상자 N명 — 목록 + 모달 */}
+        {/* 대상자 — 개인 신청은 직접 입력, 기관 대표는 공유 링크로 대상자가 각자 추가 */}
+        {applicantRole === "individual" ? (
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-ink-900">
@@ -704,6 +759,19 @@ export default function ApplicationFormPage() {
             </ul>
           )}
         </section>
+        ) : (
+          <section className="krds-card krds-card-pad">
+            <h2 className="text-base font-bold text-ink-900 mb-1">
+              3. 추천대상자
+            </h2>
+            <p className="text-sm text-ink-700 leading-relaxed">
+              기관 대표 신청은 대상자 정보를 직접 입력하지 않습니다. 아래{" "}
+              <strong>[공유 링크 발급]</strong>을 누르면 추천대상자용 링크가
+              생성됩니다. 그 링크를 각 추천대상자에게 보내면, 대상자가 본인 정보를
+              직접 입력해 이 신청 명단에 추가됩니다.
+            </p>
+          </section>
+        )}
 
         {submitError && (
           <div
@@ -730,7 +798,11 @@ export default function ApplicationFormPage() {
             임시저장
           </Button>
           <Button type="submit" disabled={submitting} size="lg">
-            {submitting ? "제출 중..." : "신청 제출"}
+            {submitting
+              ? "처리 중..."
+              : applicantRole === "organization"
+              ? "공유 링크 발급"
+              : "신청 제출"}
           </Button>
         </div>
         <p className="text-xs text-ink-500 text-center sm:text-right">
@@ -768,6 +840,7 @@ export default function ApplicationFormPage() {
                   onChange={patch =>
                     setEditingDraft(d => (d ? { ...d, ...patch } : d))
                   }
+                  onStepChange={s => setModalAtLast(s.isLast)}
                 />
               </div>
               <div className="sticky bottom-0 z-10 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 px-5 sm:px-6 py-4 border-t border-ink-100 bg-white rounded-b-xl">
@@ -794,6 +867,12 @@ export default function ApplicationFormPage() {
                 </Button>
                 <Button
                   type="button"
+                  disabled={!modalAtLast}
+                  title={
+                    modalAtLast
+                      ? ""
+                      : "마지막 단계(부적격 체크리스트)까지 입력하면 완료할 수 있습니다."
+                  }
                   onClick={() => {
                     const err = validateRecipient(editingDraft);
                     if (err) {
@@ -816,13 +895,69 @@ export default function ApplicationFormPage() {
   );
 }
 
-function RecipientCard({
+export function RecipientCard({
   data,
   onChange,
+  onStepChange,
 }: {
   data: RecipientFormData;
   onChange: (patch: Partial<RecipientFormData>) => void;
+  // 현재 단계 변화를 부모에 알림(부모가 마지막 단계에서만 제출 버튼 활성화하도록)
+  onStepChange?: (s: { step: number; isLast: boolean }) => void;
 }) {
+  // 다단계 위저드: 0 기본정보 → 1 공적사항 → 2 부적격 체크리스트. 상단에 진행 단계 표시.
+  const STEPS = ["기본정보", "공적사항", "부적격 체크리스트"];
+  const [step, setStep] = useState(0);
+  const [stepMsg, setStepMsg] = useState<string | null>(null);
+  const clAnswered = CHECKLIST_ITEMS.filter(it => data.cl_status[it.key]).length;
+  const clTotal = CHECKLIST_ITEMS.length;
+
+  // 단계별 유효성(다음 버튼). 미충족이면 해당 단계에 머무르고 안내.
+  const stepError = (s: number): string | null => {
+    if (s === 0) {
+      const m: string[] = [];
+      if (!data.recipient_name.trim()) m.push("성명");
+      if (!data.birth_date) m.push("생년월일");
+      if (!data.gender) m.push("성별");
+      if (!data.address.trim()) m.push("주소");
+      if (!data.organization_name.trim()) m.push("단체명");
+      if (!data.merit_category) m.push("공적분야");
+      if (!data.merit_period.trim()) m.push("공적기간");
+      if (m.length) return `필수 항목 누락: ${m.join(", ")}`;
+      if (!isMeritPeriodAtLeast2Years(data.merit_period))
+        return "공적기간은 2년 이상이어야 합니다.";
+      return null;
+    }
+    if (s === 1) {
+      const m: string[] = [];
+      if (!data.recommendation_reason.trim()) m.push("추천사유");
+      if (!data.merit_short_summary.trim()) m.push("공적요지");
+      if (!data.full_merit_text.trim()) m.push("공적사항 본문");
+      if (m.length) return `필수 항목 누락: ${m.join(", ")}`;
+      return null;
+    }
+    return null;
+  };
+  const goNext = () => {
+    const err = stepError(step);
+    if (err) {
+      setStepMsg(err);
+      return;
+    }
+    setStepMsg(null);
+    setStep(s => Math.min(s + 1, STEPS.length - 1));
+  };
+  const goPrev = () => {
+    setStepMsg(null);
+    setStep(s => Math.max(s - 1, 0));
+  };
+
+  // 부모(자가추가 페이지·모달)가 마지막 단계에서만 제출을 활성화하도록 단계 변화 통지
+  useEffect(() => {
+    onStepChange?.({ step, isLast: step === STEPS.length - 1 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
   const setCl = (key: string, status: Status) => {
     onChange({ cl_status: { ...data.cl_status, [key]: status } });
   };
@@ -842,7 +977,52 @@ function RecipientCard({
 
   return (
     <div className="space-y-5">
-      {/* 기본정보 */}
+      {/* 진행 단계 — 큰 게이지바로 현재 위치/남은 단계 표시 */}
+      <div className="space-y-2">
+        <div className="flex items-end justify-between">
+          <span className="text-base font-bold text-brand-700">
+            단계 {step + 1} / {STEPS.length} · {STEPS[step]}
+          </span>
+          <span className="text-sm font-semibold text-ink-500">
+            {Math.round(((step + 1) / STEPS.length) * 100)}%
+          </span>
+        </div>
+        <div className="h-3 w-full rounded-full bg-ink-100 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-brand-600 transition-all duration-500"
+            style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-xs">
+          {STEPS.map((label, i) => (
+            <span
+              key={label}
+              className={
+                i === step
+                  ? "font-bold text-brand-700"
+                  : i < step
+                  ? "font-semibold text-success-700"
+                  : "text-ink-400"
+              }
+            >
+              {i < step ? "✓ " : `${i + 1}. `}
+              {label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {stepMsg && (
+        <div
+          role="alert"
+          className="rounded-lg border border-danger-500/40 bg-danger-50 px-3 py-2 text-sm text-danger-700"
+        >
+          {stepMsg}
+        </div>
+      )}
+
+      {/* STEP 1 — 기본정보 */}
+      {step === 0 && (
       <div className="space-y-3">
         <h4 className="text-xs font-bold text-ink-600 uppercase tracking-wide">
           기본 정보
@@ -912,7 +1092,7 @@ function RecipientCard({
           </Field>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Field label="직위/직명" required>
+          <Field label="직위/직명">
             <Input
               value={data.recipient_position_title}
               onChange={e =>
@@ -1001,9 +1181,13 @@ function RecipientCard({
           </div>
         </div>
       </div>
+      )}
 
-      {/* 공적사항 — 체크리스트 위에 위치 (사용자 요청). 순서: 추천사유 → 공적요지 → 공적사항 본문 */}
-      <div className="space-y-3 border-t border-ink-100 pt-4">
+      {/* STEP 2 — 공적사항 + 경력 + 표창수여 */}
+      {step === 1 && (
+      <div className="space-y-5">
+      {/* 공적사항 — 순서: 추천사유 → 공적요지 → 공적사항 본문 */}
+      <div className="space-y-3">
         <h4 className="text-xs font-bold text-ink-600 uppercase tracking-wide">
           공적 사항
         </h4>
@@ -1180,11 +1364,29 @@ function RecipientCard({
         </button>
       </div>
 
-      {/* 체크리스트 */}
-      <div className="space-y-3 border-t border-ink-100 pt-4">
-        <h4 className="text-xs font-bold text-ink-600 uppercase tracking-wide">
-          자가 부적격 체크리스트
-        </h4>
+      </div>
+      )}
+
+      {/* STEP 3 — 부적격 체크리스트 */}
+      {step === 2 && (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="text-xs font-bold text-ink-600 uppercase tracking-wide">
+            자가 부적격 체크리스트
+          </h4>
+          <span
+            className={
+              "rounded-full px-2 py-0.5 text-xs font-semibold " +
+              (clAnswered === clTotal
+                ? "bg-success-50 text-success-700"
+                : "bg-amber-100 text-amber-700")
+            }
+          >
+            {clAnswered === clTotal
+              ? `✓ 모두 응답 (${clAnswered}/${clTotal})`
+              : `응답 필요 (${clAnswered}/${clTotal})`}
+          </span>
+        </div>
         <p className="text-xs text-ink-500">
           본인의 사실관계를 정확히 응답해 주세요.
         </p>
@@ -1259,7 +1461,24 @@ function RecipientCard({
           </div>
         </div>
       </div>
+      )}
 
+      {/* 단계 이동 */}
+      <div className="flex justify-between gap-2 pt-2">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={goPrev}
+          disabled={step === 0}
+        >
+          ← 이전
+        </Button>
+        {step < STEPS.length - 1 && (
+          <Button type="button" onClick={goNext}>
+            다음 →
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

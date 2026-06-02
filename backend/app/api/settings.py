@@ -32,8 +32,6 @@ class AppSettingRead(BaseModel):
     award_grade: Optional[str] = None
     recommender_position: Optional[str] = None
     quota_per_legislator: Optional[int] = None
-    governor_award_grade: Optional[str] = None
-    governor_quota_per_year: Optional[int] = None
     investigator_department: Optional[str] = None
     investigator_position: Optional[str] = None
     investigator_rank: Optional[str] = None
@@ -48,8 +46,6 @@ class AppSettingUpdate(BaseModel):
     award_grade: Optional[str] = None
     recommender_position: Optional[str] = None
     quota_per_legislator: Optional[int] = None
-    governor_award_grade: Optional[str] = None
-    governor_quota_per_year: Optional[int] = None
     investigator_department: Optional[str] = None
     investigator_position: Optional[str] = None
     investigator_rank: Optional[str] = None
@@ -136,8 +132,9 @@ def reset_all(db: Session = Depends(get_db)):
     # 1) 표창건 전부 (휴지통 포함) — cascade 위해 개별 삭제
     for c in db.query(models.AwardCase).all():
         db.delete(c)
-    # 2) 의원 명단 전부
+    # 2) 의원 명단 전부 + 도지사 표창 수동 체크 기록
     db.query(models.Legislator).delete(synchronize_session=False)
+    db.query(models.GovernorAwardMark).delete(synchronize_session=False)
     # 3) AppSetting 기본값
     s = _get_or_create_setting(db)
     s.agency_name = "경기도의회"
@@ -146,8 +143,6 @@ def reset_all(db: Session = Depends(get_db)):
     s.award_grade = "경기도의회 의장 표창"
     s.recommender_position = "위원"
     s.quota_per_legislator = 100
-    s.governor_award_grade = "경기도지사 표창"
-    s.governor_quota_per_year = 1
     s.investigator_department = "경기도의회 보건복지전문위원실"
     s.investigator_position = "수석전문위원"
     s.investigator_rank = "지방서기관"

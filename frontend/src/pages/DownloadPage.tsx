@@ -9,11 +9,9 @@ import {
   stampUploadedPdf,
   getCase,
   getQuotaStatus,
-  getSettings,
   updateCase,
 } from "../api";
 import { absoluteUrl } from "../api/client";
-import type { AppSetting } from "../api/settings";
 import type { AwardCaseDetail, GeneratedFileInfo } from "../types";
 import { Button } from "../components/Field";
 
@@ -32,7 +30,6 @@ export default function DownloadPage() {
   const { caseId = "" } = useParams();
   const navigate = useNavigate();
   const [detail, setDetail] = useState<AwardCaseDetail | null>(null);
-  const [setting, setSetting] = useState<AppSetting | null>(null);
   const [files, setFiles] = useState<GeneratedFileInfo[]>([]);
   const [zipFile, setZipFile] = useState<GeneratedFileInfo | null>(null);
   const [busy, setBusy] = useState(false);
@@ -46,9 +43,21 @@ export default function DownloadPage() {
 
   useEffect(() => {
     refresh();
-    getSettings().then(setSetting).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseId]);
+
+  // 드래그앤드롭이 도장 영역을 살짝 벗어나 페이지(document)에 떨어지면 윈도우 브라우저는
+  // 파일을 새 탭에서 열어버려 "무반응"처럼 보인다. 페이지 전역의 기본 동작을 막아
+  // 드롭이 항상 도장 영역의 onDrop으로만 처리되도록 한다.
+  useEffect(() => {
+    const prevent = (e: DragEvent) => e.preventDefault();
+    window.addEventListener("dragover", prevent);
+    window.addEventListener("drop", prevent);
+    return () => {
+      window.removeEventListener("dragover", prevent);
+      window.removeEventListener("drop", prevent);
+    };
+  }, []);
 
   // 추천의원 의장 표창 쿼터가 다 찼으면 1회 안내 + 위원장 명의 제안
   useEffect(() => {
@@ -118,7 +127,16 @@ export default function DownloadPage() {
     e.preventDefault();
     setDragOver(false);
     if (busy) return;
-    processStampFile(e.dataTransfer.files?.[0]);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) {
+      // 일부 윈도우/인트라넷 보안정책은 웹페이지로의 파일 드롭을 막아 dataTransfer가 빈다.
+      // 이 경우 조용히 무반응이 되지 않도록 클릭 선택을 안내한다.
+      alert(
+        "이 환경에서는 드래그앤드롭이 제한될 수 있습니다.\n아래 영역을 클릭해서 PDF를 선택해 주세요."
+      );
+      return;
+    }
+    processStampFile(file);
   };
   const onGenReportHwpx = async () => {
     setBusy(true);
@@ -168,29 +186,6 @@ export default function DownloadPage() {
     setBusy(true);
     try {
       await updateCase(caseId, { chair_sign: next });
-      await refresh();
-      setFiles([]);
-      setZipFile(null);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const isGovernor = (detail?.award_grade || "").includes("지사");
-  const onToggleGrade = async () => {
-    if (!detail || !setting) return;
-    const next = isGovernor
-      ? setting.award_grade || "경기도의회 의장 표창"
-      : setting.governor_award_grade || "경기도지사 표창";
-    if (
-      !isGovernor &&
-      !confirm("이 표창건을 경기도지사 표창으로 변경합니다. 진행할까요?")
-    ) {
-      return;
-    }
-    setBusy(true);
-    try {
-      await updateCase(caseId, { award_grade: next });
       await refresh();
       setFiles([]);
       setZipFile(null);
@@ -249,35 +244,9 @@ export default function DownloadPage() {
       </div>
 
       <div className="krds-card krds-card-pad space-y-5">
-        {/* 훈격 — 경기도지사 표창은 담당자만 지정 */}
-        <div
-          className={
-            "rounded-lg border p-3 sm:p-4 " +
-            (isGovernor
-              ? "border-accent-300 bg-accent-50"
-              : "border-ink-200 bg-ink-50")
-          }
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-bold">
-                훈격: {detail.award_grade}
-              </h3>
-              <p className="text-xs text-ink-700 mt-0.5">
-                경기도지사 표창은 담당자만 지정할 수 있습니다. 변경하면
-                공적조서·표창대상자의 훈격이 함께 바뀝니다.
-              </p>
-            </div>
-            <Button
-              variant={isGovernor ? "ghost" : "secondary"}
-              disabled={busy || !setting}
-              onClick={onToggleGrade}
-            >
-              {isGovernor
-                ? "경기도의회 의장 표창으로 되돌리기"
-                : "경기도지사 표창으로 변경"}
-            </Button>
-          </div>
+        {/* 훈격 표시 */}
+        <div className="rounded-lg border border-ink-200 bg-ink-50 p-3 sm:p-4">
+          <h3 className="text-sm font-bold">훈격: {detail.award_grade}</h3>
         </div>
 
         {/* 위원장 명의 제출 — 통계는 원래 추천의원에 남고 문서 추천관만 위원장으로 */}
@@ -349,11 +318,20 @@ export default function DownloadPage() {
             찍어 드립니다. 제출본은 이 도장본 PDF를 사용하세요.
           </p>
           <label
+            onDragEnter={e => {
+              // 윈도우 일부 브라우저는 dragenter에서도 preventDefault가 없으면 드롭을 거부한다.
+              e.preventDefault();
+              if (!busy) setDragOver(true);
+            }}
             onDragOver={e => {
               e.preventDefault();
               if (!busy) setDragOver(true);
             }}
-            onDragLeave={() => setDragOver(false)}
+            onDragLeave={e => {
+              // label 내부 자식(span 등)으로 이동한 경우엔 하이라이트를 끄지 않는다(깜빡임 방지).
+              if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+              setDragOver(false);
+            }}
             onDrop={onStampDrop}
             className={
               "mt-3 flex flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-4 py-7 text-center transition " +

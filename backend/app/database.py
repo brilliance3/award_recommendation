@@ -92,6 +92,7 @@ def _apply_lightweight_migrations() -> None:
     additions = [
         ("recipients", "rank_grade", "VARCHAR(100)"),
         ("recipients", "gender", "VARCHAR(10)"),
+        ("recipients", "award_date", "DATE"),
         ("checklists", "admin_election_law_general", "VARCHAR(20)"),
         ("checklists", "admin_election_law_general_note", "TEXT"),
         ("checklists", "admin_election_law_basis", "VARCHAR(20)"),
@@ -109,9 +110,12 @@ def _apply_lightweight_migrations() -> None:
         ("award_cases", "seal_applied", "BOOLEAN DEFAULT 0 NOT NULL"),
         ("award_cases", "seal_applied_at", "DATETIME"),
         ("award_cases", "chair_sign", "BOOLEAN DEFAULT 0 NOT NULL"),
+        ("award_cases", "share_token", "VARCHAR(36)"),
+        ("award_cases", "share_enabled", "BOOLEAN DEFAULT 1 NOT NULL"),
+        ("award_cases", "share_expires_at", "DATETIME"),
+        ("award_cases", "manage_token", "VARCHAR(36)"),
+        ("award_cases", "applicant_submitted", "BOOLEAN DEFAULT 1 NOT NULL"),
         ("award_cases", "deleted_at", "DATETIME"),
-        ("app_settings", "governor_award_grade", "VARCHAR(255) DEFAULT '경기도지사 표창'"),
-        ("app_settings", "governor_quota_per_year", "INTEGER DEFAULT 1"),
         ("app_settings", "department_name", "VARCHAR(255) DEFAULT '보건복지전문위원실'"),
     ]
     with engine.begin() as conn:

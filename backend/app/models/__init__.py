@@ -6,7 +6,7 @@ from .career_record import CareerRecord
 from .previous_award import PreviousAward
 from .generated_document import GeneratedDocument
 from .checklist import Checklist
-from .settings import AppSetting, Legislator
+from .settings import AppSetting, GovernorAwardMark, Legislator
 
 __all__ = [
     "AwardCase",
@@ -18,4 +18,5 @@ __all__ = [
     "Checklist",
     "AppSetting",
     "Legislator",
+    "GovernorAwardMark",
 ]

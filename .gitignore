@@ -22,6 +22,10 @@ backend/frontend_dist/
 
 # 백업/임시
 *.bak
+*.bak_*
+
+# 루트에 떨어진 작업용 HWPX(샘플·매뉴얼·하네스 등) — 커밋 금지. 템플릿(backend/app/templates)은 하위경로라 영향 없음.
+/*.hwpx
 
 # Node
 node_modules/

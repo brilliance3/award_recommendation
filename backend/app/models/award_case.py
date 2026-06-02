@@ -39,6 +39,16 @@ class AwardCase(Base):
     # 위원장 명의 제출 — 통계(쿼터)는 recommender_name(원래 의원)에 남기되,
     # 문서(공적조서 추천관·추천자)만 위원장 명의로 출력. 의원 쿼터 초과 시 사용.
     chair_sign = Column(Boolean, default=False, nullable=False)
+    # 기관 대표 신청용 공유 링크 — 외부 피추천자가 이 토큰으로 본인 정보를 직접 1명씩 추가.
+    # 기관 신청 시에만 발급(개인·수동 생성은 NULL). 회수(enabled=False)·만료(expires_at) 가능.
+    share_token = Column(String(36), unique=True, index=True)
+    share_enabled = Column(Boolean, default=True, nullable=False)
+    share_expires_at = Column(DateTime)
+    # 기관 대표 전용 검토·최종제출 관리 토큰(대상자 추가 토큰과 별개, 대표만 보유).
+    manage_token = Column(String(36), unique=True, index=True)
+    # 신청자(대표) 최종 제출 여부. False면 담당자 목록(표창 관리)에서 숨김.
+    # 일반/개인/수동 생성은 True(즉시 노출), 기관 대표 신청은 생성 시 False → 최종제출 시 True.
+    applicant_submitted = Column(Boolean, default=True, nullable=False)
     # 휴지통 — 값이 있으면 삭제됨(soft delete). 목록에서 숨기고 휴지통에서 복구/완전삭제.
     deleted_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)

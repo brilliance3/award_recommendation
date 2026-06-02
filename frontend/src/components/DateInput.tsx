@@ -15,6 +15,8 @@ interface Props {
   placeholder?: string;
   minDate?: string; // "YYYY-MM-DD" 미만이면 경고 표시 (예: 오늘 이후만)
   minHint?: string; // minDate 위반 시 보여줄 안내문
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void; // Enter 저장/Escape 취소 등
+  autoFocus?: boolean;
 }
 
 const inputBase =
@@ -52,6 +54,8 @@ export default function DateInput({
   placeholder,
   minDate,
   minHint,
+  onKeyDown,
+  autoFocus,
 }: Props) {
   const [text, setText] = useState(isoToDisplay(value));
 
@@ -92,6 +96,8 @@ export default function DateInput({
         value={text}
         onChange={e => handleChange(e.target.value)}
         onBlur={handleBlur}
+        onKeyDown={onKeyDown}
+        autoFocus={autoFocus}
         placeholder={placeholder || "예: 1990.03.15 (숫자만 입력)"}
         maxLength={10}
       />

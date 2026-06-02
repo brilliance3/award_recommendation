@@ -18,7 +18,15 @@ router = APIRouter(prefix="/api/award-cases", tags=["award-cases"])
 def _to_read(case: models.AwardCase) -> schemas.AwardCaseRead:
     data = schemas.AwardCaseRead.model_validate(case)
     try:
-        data.recipient_count = len(case.recipients)
+        recips = list(case.recipients)
+        data.recipient_count = len(recips)
+        # 대상자 개인별 표창일(미설정 시 case.award_date 폴백)의 대표값=최솟값,
+        # 서로 다른 날짜 개수=award_date_count(>1이면 목록에서 '복수' 표시).
+        eff = [(r.award_date or case.award_date) for r in recips]
+        eff = [d for d in eff if d]
+        if eff:
+            data.award_date = min(eff)
+        data.award_date_count = len(set(eff))
     except Exception:
         data.recipient_count = 0
     return data
@@ -27,9 +35,20 @@ def _to_read(case: models.AwardCase) -> schemas.AwardCaseRead:
 def _to_detail(case: models.AwardCase) -> schemas.AwardCaseDetail:
     detail = schemas.AwardCaseDetail.model_validate(case)
     try:
-        detail.recipient_count = len(case.recipients)
+        recips = list(case.recipients)
+        detail.recipient_count = len(recips)
+        # 대상자별 관리자 검토 완료(checklist.admin_reviewed_at) 표시 + 전체 검토 여부.
+        # detail.recipients는 case.recipients와 동일 순서로 생성됨.
+        for d, r in zip(detail.recipients, recips):
+            d.admin_reviewed = bool(
+                r.checklist is not None and r.checklist.admin_reviewed_at is not None
+            )
+        detail.all_reviewed = len(recips) > 0 and all(
+            d.admin_reviewed for d in detail.recipients
+        )
     except Exception:
         detail.recipient_count = 0
+        detail.all_reviewed = False
     return detail
 
 

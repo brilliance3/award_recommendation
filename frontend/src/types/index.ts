@@ -18,17 +18,19 @@ export interface AwardCase {
   status?: string;
   seal_applied?: boolean;
   chair_sign?: boolean;
+  // 기관 대표 신청 공유 링크(대상자 자가추가) — 회수(enabled)·만료(expires_at)
+  share_token?: string;
+  share_enabled?: boolean;
+  share_expires_at?: string;
   created_at: string;
   updated_at: string;
   recipient_count: number;
+  award_date_count?: number; // 대상자별 표창일 distinct 개수(>1이면 복수)
 }
 
 export interface AwardCaseDetail extends AwardCase {
   recipients: Recipient[];
-}
-
-export interface AwardCasePreview extends AwardCase {
-  recipients: RecipientDetail[];
+  all_reviewed?: boolean; // 모든 대상자 검토 완료(문서 생성 가능 조건)
 }
 
 export interface Recipient {
@@ -50,7 +52,9 @@ export interface Recipient {
   merit_category?: string;
   merit_period?: string;
   recommendation_rank?: string;
+  award_date?: string; // 표창일(대상자 개인 단위, YYYY-MM-DD)
   note?: string;
+  admin_reviewed?: boolean; // 관리자 검토(공직선거법) 완료 여부
   created_at: string;
   updated_at: string;
 }

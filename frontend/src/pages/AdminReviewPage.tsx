@@ -55,25 +55,8 @@ export default function AdminReviewPage() {
 
   if (!r) return <div className="text-ink-500">불러오는 중...</div>;
 
-  if (!r.checklist || !r.checklist.submitted_at) {
-    return (
-      <div className="max-w-2xl mx-auto">
-        <div className="rounded-lg border border-warn-500/40 bg-warn-50 px-6 py-10 text-center">
-          <h1 className="text-lg font-bold text-warn-700 mb-2">
-            아직 자가 체크리스트가 제출되지 않았습니다
-          </h1>
-          <p className="text-sm text-ink-700">
-            {r.recipient_name} 대상자의 자가 체크리스트 제출 후 관리자 검토가 가능합니다.
-          </p>
-          <div className="mt-5">
-            <Button onClick={() => navigate(-1)} variant="secondary">
-              ← 돌아가기
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // 자가 체크리스트가 없는 대상자(수동/XLSX 추가)도 담당자가 공직선거법 검토를
+  // 진행할 수 있다. (검토 저장 시 서버가 체크리스트를 생성해 결과를 붙인다.)
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -125,9 +108,9 @@ export default function AdminReviewPage() {
           <p className="krds-page-sub">
             {r.organization_name || "-"} · {r.merit_category || "-"} · 본인 자가
             체크리스트 제출일{" "}
-            {cl.submitted_at
+            {cl?.submitted_at
               ? new Date(cl.submitted_at).toLocaleString("ko-KR")
-              : "-"}
+              : "미제출"}
           </p>
         </div>
         <Button variant="secondary" onClick={() => navigate(-1)}>
@@ -135,39 +118,46 @@ export default function AdminReviewPage() {
         </Button>
       </div>
 
-      {/* 자가 체크리스트 결과 (읽기 전용) */}
+      {/* 자가 체크리스트 결과 (읽기 전용) — 없으면 미제출 안내 */}
       <section className="krds-card krds-card-pad">
         <h2 className="krds-section-title mb-3">
           1. 추천대상자 자가 체크리스트 결과
         </h2>
-        <ul className="divide-y divide-ink-100">
-          {CHECKLIST_ITEMS.map(item => {
-            const status = (cl as any)[`item_${item.key}`] as string;
-            const note = (cl as any)[`item_${item.key}_note`] as string;
-            const isOk = status === "ok";
-            return (
-              <li key={item.key} className="py-2.5 flex items-start gap-3">
-                <span className="krds-badge krds-badge-ink shrink-0 mt-0.5">
-                  {item.label}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <span
-                    className={`text-sm font-semibold ${
-                      isOk ? "text-success-700" : "text-danger-600"
-                    }`}
-                  >
-                    {isOk ? "해당 없음" : "해당 있음"}
+        {!cl || !cl.submitted_at ? (
+          <p className="text-sm text-ink-500">
+            자가 체크리스트가 제출되지 않은 대상자입니다(수동·일괄 추가 등). 아래
+            공직선거법 검토만 진행하셔도 됩니다.
+          </p>
+        ) : (
+          <ul className="divide-y divide-ink-100">
+            {CHECKLIST_ITEMS.map(item => {
+              const status = (cl as any)[`item_${item.key}`] as string;
+              const note = (cl as any)[`item_${item.key}_note`] as string;
+              const isOk = status === "ok";
+              return (
+                <li key={item.key} className="py-2.5 flex items-start gap-3">
+                  <span className="krds-badge krds-badge-ink shrink-0 mt-0.5">
+                    {item.label}
                   </span>
-                  {note && (
-                    <p className="text-xs text-ink-600 mt-1 leading-relaxed">
-                      {note}
-                    </p>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                  <div className="min-w-0 flex-1">
+                    <span
+                      className={`text-sm font-semibold ${
+                        isOk ? "text-success-700" : "text-danger-600"
+                      }`}
+                    >
+                      {isOk ? "해당 없음" : "해당 있음"}
+                    </span>
+                    {note && (
+                      <p className="text-xs text-ink-600 mt-1 leading-relaxed">
+                        {note}
+                      </p>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
 
       {/* 공직선거법 검토 입력 */}
@@ -239,7 +229,7 @@ export default function AdminReviewPage() {
               placeholder="전문위원실 검토자 성명"
             />
           </Field>
-          {cl.admin_reviewed_at && (
+          {cl?.admin_reviewed_at && (
             <p className="text-xs text-ink-500">
               최근 검토일:{" "}
               {new Date(cl.admin_reviewed_at).toLocaleString("ko-KR")} ·{" "}

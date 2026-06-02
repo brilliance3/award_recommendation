@@ -4,7 +4,7 @@ import axios from "axios";
  * 운영(Vercel): VITE_API_BASE_URL = https://award-recommendation.fly.dev
  * 로컬 개발: 빈 문자열 → vite.config.ts 의 /api 프록시로 라우팅
  */
-export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL || "";
+const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL || "";
 
 export const api = axios.create({
   baseURL: API_BASE_URL,

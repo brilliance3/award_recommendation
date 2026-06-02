@@ -43,7 +43,7 @@ def _load_seal_image(path: Path) -> io.BytesIO:
     w, h = img.size
     for y in range(h):
         for x in range(w):
-            r, g, b, a = pixels[x, y]
+            r, g, b, _ = pixels[x, y]
             # 흰색/매우 밝은 회색 → 투명
             if r > 210 and g > 210 and b > 210:
                 pixels[x, y] = (255, 255, 255, 0)

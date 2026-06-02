@@ -1,7 +1,7 @@
 """기존 표창대상자 XLSX 업로드 → DB 반영 (3차 기능)"""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import List
 
@@ -49,6 +49,14 @@ def import_recipients_from_xlsx(file_path: Path, case: AwardCase) -> List[Recipi
 
         birth_date, birth_yy = _parse_birth(_to_str(birth6))
 
+        # 표창일(M열) — 대상자 개인 단위로 저장. datetime이면 date로 변환.
+        if isinstance(award_dt, datetime):
+            r_award_date = award_dt.date()
+        elif isinstance(award_dt, date):
+            r_award_date = award_dt
+        else:
+            r_award_date = None
+
         r = Recipient(
             sequence_no=int(seq) if seq else len(recipients) + 1,
             recipient_name=_to_str(name),
@@ -60,6 +68,7 @@ def import_recipients_from_xlsx(file_path: Path, case: AwardCase) -> List[Recipi
             recipient_position_title=_to_str(pos_title),
             merit_category=_to_str(field),
             merit_period=_to_str(period),
+            award_date=r_award_date,
             note=_to_str(note),
         )
         recipients.append(r)
@@ -69,7 +78,8 @@ def import_recipients_from_xlsx(file_path: Path, case: AwardCase) -> List[Recipi
             case.recommender_department = _to_str(rdept)
             case.recommender_position = _to_str(rpos)
             case.recommender_name = _to_str(rname)
-        if isinstance(award_dt, date) and not case.award_date:
-            case.award_date = award_dt
+        # case.award_date는 대표/폴백값(첫 행 날짜) — 목록 정렬·미설정 대상자 폴백용
+        if r_award_date and not case.award_date:
+            case.award_date = r_award_date
 
     return recipients

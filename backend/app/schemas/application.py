@@ -39,7 +39,7 @@ class ApplicationRecipient(BaseModel):
     region: Optional[str] = None
     occupation: Optional[str] = None
     organization_name: str = Field(..., min_length=1)  # 단체명 필수
-    recipient_position_title: str = Field(..., min_length=1)  # 직위 필수
+    recipient_position_title: Optional[str] = None  # 직위/직명 (선택)
     rank_grade: Optional[str] = None
     external_title: Optional[str] = None
     merit_category: str = Field(..., min_length=1)  # 공적분야 필수
@@ -63,15 +63,60 @@ class ApplicationSubmit(BaseModel):
     # 추천의원 정보 — 추천자(case.recommender_*)로 저장됨
     recommender_name: str = Field(..., min_length=1)  # 의원 성명 (필수)
 
-    # 훈격: 경기도의회 의장(chairman) / 경기도지사(governor)
-    award_kind: str = Field("chairman", pattern="^(chairman|governor)$")
+    # 훈격은 경기도의회 의장 표창 단일(도지사 표창은 별도 기능 제거됨).
     award_date: Optional[date] = None  # 희망 표창일 (선택)
 
-    # 대상자 N명 (1명 이상)
-    recipients: List[ApplicationRecipient] = Field(..., min_length=1)
+    # 대상자 — 개인 신청은 본인 1명 이상, 기관 대표 신청은 0명 허용(공유 URL로 자가추가).
+    # 역할별 최소개수는 핸들러(submit_application)에서 검증한다.
+    recipients: List[ApplicationRecipient] = Field(default_factory=list)
 
 
 class ApplicationSubmitResponse(BaseModel):
     award_case_id: str
     recipient_ids: List[str]
+    # 기관 대표 신청이면 대상자 자가추가용 공유 토큰(개인 신청은 None). 프론트가 URL 조립.
+    share_token: Optional[str] = None
+    # 기관 대표 전용 검토·최종제출 관리 토큰(개인 신청은 None).
+    manage_token: Optional[str] = None
     message: str = "신청이 정상적으로 접수되었습니다."
+
+
+class ShareCaseInfo(BaseModel):
+    """공유 토큰으로 외부 피추천자가 보는 신청 요약 — PII 최소(대상자 명단·생년월일·주소 미노출)."""
+    organization: Optional[str] = None  # 신청 기관명
+    recommender_name: Optional[str] = None  # 추천의원
+    award_grade: Optional[str] = None  # 훈격
+    award_date: Optional[date] = None  # 희망 표창일
+    recipient_count: int = 0  # 현재까지 추가된 대상자 수
+
+
+class ShareRecipientAddResponse(BaseModel):
+    recipient_id: str
+    recipient_count: int
+    message: str = "대상자가 추가되었습니다."
+
+
+class ManageRecipientItem(BaseModel):
+    """대표 검토 화면에 보이는 대상자 1명 요약(주소·생년월일 등 민감정보 제외)."""
+    recipient_name: Optional[str] = None
+    organization_name: Optional[str] = None
+    recipient_position_title: Optional[str] = None
+    merit_category: Optional[str] = None
+
+
+class ManageCaseInfo(BaseModel):
+    """기관 대표 전용 관리/검토 화면 데이터(대표 본인이 모은 명단 확인 + 최종 제출)."""
+    organization: Optional[str] = None
+    recommender_name: Optional[str] = None
+    award_grade: Optional[str] = None
+    award_date: Optional[date] = None
+    share_token: Optional[str] = None  # 대표가 대상자 추가 링크를 다시 복사할 수 있게
+    submitted: bool = False  # 최종 제출 여부(False면 담당자에게 아직 안 보임)
+    recipient_count: int = 0
+    recipients: List[ManageRecipientItem] = []
+
+
+class ManageSubmitResponse(BaseModel):
+    submitted: bool = True
+    recipient_count: int = 0
+    message: str = "최종 제출되었습니다."

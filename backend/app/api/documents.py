@@ -159,9 +159,12 @@ def generate_report_hwpx(case_id: str, db: Session = Depends(get_db)):
     if not case.recipients:
         raise HTTPException(status_code=400, detail="대상자가 없습니다")
 
-    path = hwpx_generator.generate_merit_report_hwpx(
-        case, investigator=_investigator_dict(db)
-    )
+    # chair_sign이면 문서 추천관·추천자만 위원장 명의로 출력(통계는 원래 의원 유지).
+    # ZIP·PDF 경로와 동일하게 override를 적용한다.
+    with _chair_override_ctx(case, db):
+        path = hwpx_generator.generate_merit_report_hwpx(
+            case, investigator=_investigator_dict(db)
+        )
     _register_document(db, case.id, None, "merit_report_hwpx", path)
 
     return schemas.GenerateDocumentResponse(
@@ -173,6 +176,37 @@ def generate_report_hwpx(case_id: str, db: Session = Depends(get_db)):
             )
         ]
     )
+
+
+def _apply_settings_recommender(case: models.AwardCase, db: Session):
+    """문서 생성 직전, 위원회명(committee_name)/기관명(agency_name)을 설정값으로 실시간 갱신.
+
+    공적조서 서식1의 '○ 추천기관', '추천(의뢰)자', 추천관 signoff는 case.recommender_department /
+    case.recommender_full_title 스냅샷에서 채워지는데, 이 스냅샷은 신청 시점 설정값이라 이후 설정
+    변경이 반영되지 않았다. 여기서 생성 직전에만 설정값으로 인메모리 갱신한다(DB commit 없음 →
+    통계·스냅샷 보존). award_grade(훈격)는 case별 의장/도지사 토글이라 절대 건드리지 않는다.
+    recommender_name은 case 스냅샷 유지(이후 chair override가 위원장으로 갈아끼움).
+    원복용 (recommender_department, recommender_full_title) 튜플 반환.
+    """
+    setting = db.query(models.AppSetting).first()
+    agency = ((setting.agency_name if setting else None) or "").strip()
+    committee = ((setting.committee_name if setting else None) or "").strip()
+    if not agency and not committee:
+        return None  # 폴백 가드: 둘 다 비면 기존 case 스냅샷 유지(설정 공란이 case를 덮는 사고 차단)
+    orig = (case.recommender_department, case.recommender_full_title)
+    eff_committee = committee or case.recommender_department or ""
+    eff_agency = agency or "경기도의회"
+    if committee:
+        case.recommender_department = committee
+    name = case.recommender_name or ""
+    # applications.py와 동일 포맷(공백 3칸·호칭 '의원'). name 없으면 trailing 공백만 정리.
+    case.recommender_full_title = f"{eff_agency} {eff_committee} 의원   {name}".rstrip()
+    return orig
+
+
+def _restore_settings_recommender(case: models.AwardCase, orig):
+    if orig:
+        case.recommender_department, case.recommender_full_title = orig
 
 
 def _apply_chair_override(case: models.AwardCase, db: Session):
@@ -213,12 +247,15 @@ def _restore_recommender(case: models.AwardCase, orig):
 
 @contextmanager
 def _chair_override_ctx(case: models.AwardCase, db: Session):
-    """chair_sign이면 문서 생성 동안만 추천관을 위원장으로 치환, 끝나면 원복(통계 보존)."""
-    orig = _apply_chair_override(case, db)
+    """문서 생성 동안만 (1)위원회명/기관명을 설정값으로 실시간 반영, (2)chair_sign이면 추천관을
+    위원장 명의로 치환. 끝나면 역순 원복(통계·스냅샷 보존, DB commit 없음)."""
+    settings_orig = _apply_settings_recommender(case, db)  # 1) 위원회명/기관명 먼저 갱신
+    chair_orig = _apply_chair_override(case, db)            # 2) chair_sign이면 위원장 명의 덮어쓰기
     try:
         yield
     finally:
-        _restore_recommender(case, orig)
+        _restore_recommender(case, chair_orig)              # chair override 원복(역순)
+        _restore_settings_recommender(case, settings_orig)  # settings 반영 원복
 
 
 def _investigator_dict(db: Session):

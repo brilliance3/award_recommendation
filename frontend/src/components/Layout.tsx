@@ -4,8 +4,8 @@ import { getSettings } from "../api";
 
 const nav = [
   { to: "/quota", label: "의원 쿼터 현황" },
-  { to: "/all-cases", label: "전체 표창 현황" },
-  { to: "/", label: "관리", end: true },
+  // '관리'와 '전체 표창 현황'은 중복이라 하나로 통합('표창 관리').
+  { to: "/", label: "표창 관리", end: true },
   { to: "/settings", label: "설정" },
 ];
 

@@ -173,7 +173,7 @@ def generate_recipient_list_xlsx(case: AwardCase) -> Path:
         row = 4 + i
         if row > 4:  # 둘째 대상자부터: 행4 서식을 복제
             _clone_row_style(ws, 4, row)
-        award_dt = case.award_date  # date 객체 (템플릿 M열 표시형식 그대로)
+        award_dt = r.award_date or case.award_date  # 대상자 개인 표창일(폴백 case)
         recommender_dept = case.recommender_department or ""
         recommender_pos = case.recommender_position or "위원"
         region = r.region or _extract_region_from_address(r.address)

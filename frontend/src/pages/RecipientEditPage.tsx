@@ -77,7 +77,6 @@ export default function RecipientEditPage() {
     if (!form.organization_name?.trim()) missing.push("단체명");
     if (!form.recipient_name?.trim()) missing.push("성명");
     if (!form.birth_date) missing.push("생년월일");
-    if (!form.recipient_position_title?.trim()) missing.push("직위");
     if (!form.merit_category?.trim()) missing.push("공적분야");
     if (!form.merit_period?.trim()) missing.push("공적기간");
     if (missing.length > 0) {
@@ -319,7 +318,7 @@ export default function RecipientEditPage() {
           </Field>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-          <Field label="직위/직명" required>
+          <Field label="직위/직명">
             <Input
               value={form.recipient_position_title || ""}
               onChange={setField("recipient_position_title")}

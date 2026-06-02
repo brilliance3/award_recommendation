@@ -37,6 +37,8 @@ class Recipient(Base):
     merit_category = Column(String(255))
     merit_period = Column(String(100))
     recommendation_rank = Column(String(50), default="1순위")
+    # 표창일(대상자 개인 단위). 미설정이면 AwardCase.award_date로 폴백.
+    award_date = Column(Date)
     note = Column(String(500))
 
     created_at = Column(DateTime, default=datetime.utcnow)

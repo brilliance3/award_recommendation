@@ -1,9 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { deleteRecipient, getCase, importXlsx, updateCase } from "../api";
+import { cancelAdminReview, deleteRecipient, getCase, importXlsx, updateCase, updateRecipient } from "../api";
 import { absoluteUrl } from "../api/client";
 import type { AwardCaseDetail } from "../types";
 import { Button, Input } from "../components/Field";
+import DateInput from "../components/DateInput";
+import ShareLinkBox from "../components/ShareLinkBox";
+
+/** 추천관 표시 — full_title이 이미 이름을 포함하면 그대로, 아니면 이름을 덧붙인다(이름 중복 방지). */
+function recommenderDisplay(fullTitle?: string, name?: string): string {
+  const ft = (fullTitle || "").trim();
+  const nm = (name || "").trim();
+  if (!nm) return ft;
+  if (!ft) return nm;
+  return ft.endsWith(nm) ? ft : `${ft} ${nm}`;
+}
 
 export default function RecipientListPage() {
   const { caseId = "" } = useParams();
@@ -16,15 +27,38 @@ export default function RecipientListPage() {
   const [titleDraft, setTitleDraft] = useState("");
   const [savingTitle, setSavingTitle] = useState(false);
 
-  // 표창일 인라인 편집
+  // 표창일 일괄 적용(건 단위 → 전체 대상자) 인라인 편집
   const [editingAwardDate, setEditingAwardDate] = useState(false);
   const [awardDateDraft, setAwardDateDraft] = useState("");
   const [savingAwardDate, setSavingAwardDate] = useState(false);
+
+  // 대상자 개인별 표창일 인라인 편집
+  const [editRcpDateId, setEditRcpDateId] = useState<string | null>(null);
+  const [rcpDateDraft, setRcpDateDraft] = useState("");
+  const [savingRcpDate, setSavingRcpDate] = useState(false);
+
+  // 공유 링크 회수/재개
+  const [savingShare, setSavingShare] = useState(false);
 
   const load = () => getCase(caseId).then(setDetail);
   useEffect(() => {
     load();
   }, [caseId]);
+
+  const onToggleShare = async (next: boolean) => {
+    setSavingShare(true);
+    try {
+      await updateCase(caseId, { share_enabled: next });
+      await load();
+    } catch (err: any) {
+      alert(
+        "공유 링크 설정 변경 실패: " +
+          (err?.response?.data?.detail || err?.message || "")
+      );
+    } finally {
+      setSavingShare(false);
+    }
+  };
 
   if (!detail) return <div className="text-ink-500">불러오는 중...</div>;
 
@@ -69,19 +103,22 @@ export default function RecipientListPage() {
     setEditingAwardDate(false);
     setAwardDateDraft("");
   };
+  // 표창일 전체 일괄 적용 — 건 대표값 + 모든 대상자 개인 표창일을 동일하게 설정
   const saveAwardDate = async () => {
-    if (awardDateDraft === (detail.award_date || "")) {
-      setEditingAwardDate(false);
-      return;
-    }
     setSavingAwardDate(true);
     try {
-      await updateCase(caseId, { award_date: awardDateDraft || undefined });
+      const val = awardDateDraft || undefined;
+      await updateCase(caseId, { award_date: val });
+      await Promise.all(
+        (detail.recipients || []).map(r =>
+          updateRecipient(r.id, { award_date: val })
+        )
+      );
       await load();
       setEditingAwardDate(false);
     } catch (err: any) {
       alert(
-        "표창일 저장에 실패했습니다.\n" +
+        "표창일 일괄 적용에 실패했습니다.\n" +
           (err?.response?.data?.detail || err?.message || "")
       );
     } finally {
@@ -89,10 +126,66 @@ export default function RecipientListPage() {
     }
   };
 
+  // 대상자 개인별 표창일 저장
+  const startEditRcpDate = (r: { id: string; award_date?: string }) => {
+    setEditRcpDateId(r.id);
+    // 개인 표창일 미설정이면 건 대표값(폴백)으로 시작 — 실제 출력값과 일치
+    setRcpDateDraft(r.award_date || detail.award_date || "");
+  };
+  const cancelEditRcpDate = () => {
+    setEditRcpDateId(null);
+    setRcpDateDraft("");
+  };
+  const saveRcpDate = async (id: string) => {
+    setSavingRcpDate(true);
+    try {
+      await updateRecipient(id, { award_date: rcpDateDraft || undefined });
+      await load();
+      setEditRcpDateId(null);
+    } catch (err: any) {
+      alert(
+        "표창일 저장에 실패했습니다.\n" +
+          (err?.response?.data?.detail || err?.message || "")
+      );
+    } finally {
+      setSavingRcpDate(false);
+    }
+  };
+
   const onDelete = async (id: string) => {
     if (!confirm("이 대상자와 관련 문서를 삭제합니다. 계속할까요?")) return;
     await deleteRecipient(id);
     load();
+  };
+
+  // 검토 완료 표시 해제(미검토로 되돌리기)
+  const onCancelReview = async (id: string, name: string) => {
+    if (!confirm(`${name} 대상자의 검토 완료를 해제하고 미검토로 되돌립니다. 계속할까요?`))
+      return;
+    try {
+      await cancelAdminReview(id);
+      await load();
+    } catch (err: any) {
+      alert(
+        "검토 해제에 실패했습니다.\n" +
+          (err?.response?.data?.detail || err?.message || "")
+      );
+    }
+  };
+
+  // 문서 생성 진입 — 전원 검토 완료 전이면 팝업 안내 후 차단
+  const onGenerateDocs = () => {
+    const pending = (detail.recipients || [])
+      .filter(r => !r.admin_reviewed)
+      .map(r => r.recipient_name);
+    if (pending.length > 0) {
+      alert(
+        "모든 대상자의 ‘검토’를 완료해야 문서를 생성할 수 있습니다.\n\n" +
+          `미검토 대상자 (${pending.length}명): ${pending.join(", ")}`
+      );
+      return;
+    }
+    navigate(`/cases/${caseId}/download`);
   };
 
   const onUploadXlsx = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,25 +271,30 @@ export default function RecipientListPage() {
               {detail.award_grade}
             </span>
             <span>
-              {detail.recommender_full_title} {detail.recommender_name}
+              {recommenderDisplay(
+                detail.recommender_full_title,
+                detail.recommender_name
+              )}
             </span>
             <span className="text-ink-300">·</span>
             {editingAwardDate ? (
               <span className="inline-flex items-center gap-1.5">
-                <Input
-                  type="date"
-                  value={awardDateDraft}
-                  onChange={e => setAwardDateDraft(e.target.value)}
-                  autoFocus
-                  onKeyDown={e => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      saveAwardDate();
-                    } else if (e.key === "Escape") {
-                      cancelEditAwardDate();
-                    }
-                  }}
-                />
+                <span className="w-36 inline-block">
+                  <DateInput
+                    value={awardDateDraft}
+                    onChange={setAwardDateDraft}
+                    autoFocus
+                    placeholder="예: 2026.07.25"
+                    onKeyDown={e => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        saveAwardDate();
+                      } else if (e.key === "Escape") {
+                        cancelEditAwardDate();
+                      }
+                    }}
+                  />
+                </span>
                 <Button
                   size="sm"
                   onClick={saveAwardDate}
@@ -214,14 +312,21 @@ export default function RecipientListPage() {
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5">
-                <span>표창일 {detail.award_date || "미정"}</span>
+                <span>
+                  표창일 {detail.award_date || "미정"}
+                  {(detail.award_date_count || 0) > 1 && (
+                    <span className="text-ink-500">
+                      {" "}외 {(detail.award_date_count || 1) - 1}일(대상자별)
+                    </span>
+                  )}
+                </span>
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={startEditAwardDate}
-                  title="표창일 수정"
+                  title="표창일 전체 일괄 적용 (대상자 개인별은 아래 표에서 수정)"
                 >
-                  ✎
+                  일괄 ✎
                 </Button>
               </span>
             )}
@@ -250,12 +355,31 @@ export default function RecipientListPage() {
           </Button>
           <Button
             variant="accent"
-            onClick={() => navigate(`/cases/${caseId}/download`)}
+            onClick={onGenerateDocs}
+            title={
+              detail.all_reviewed
+                ? undefined
+                : "모든 대상자의 ‘검토’를 완료해야 문서를 생성할 수 있습니다."
+            }
           >
             문서 생성
           </Button>
         </div>
       </div>
+
+      {/* 검토 미완료 안내 — 모든 대상자 검토 후 문서 생성 가능 */}
+      {detail.recipients.length > 0 && !detail.all_reviewed && (
+        <div className="mb-4 rounded-lg border border-warn-500/40 bg-warn-50 px-4 py-2.5 text-sm text-warn-700">
+          ⚠ 아직 검토하지 않은 대상자가 있습니다. <b>모든 대상자의 ‘검토’를 완료</b>해야
+          문서를 생성할 수 있습니다.
+          {" "}(미검토:{" "}
+          {detail.recipients
+            .filter(r => !r.admin_reviewed)
+            .map(r => r.recipient_name)
+            .join(", ")}
+          )
+        </div>
+      )}
 
       {/* 신청자 정보 (민간인 /apply 신청 건만 표시) */}
       {detail.applicant_name && (
@@ -299,6 +423,64 @@ export default function RecipientListPage() {
         </div>
       )}
 
+      {/* 기관 대표 신청 — 대상자 자가추가 공유 링크 (보기·재복사·회수) */}
+      {detail.share_token && (
+        <div className="krds-card krds-card-pad mb-4 border-blue-200 bg-blue-50/40">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h2 className="text-sm font-bold text-ink-800">
+              대상자 자가추가 공유 링크
+            </h2>
+            <span
+              className={`text-xs font-semibold ${
+                detail.share_enabled ? "text-success-700" : "text-danger-600"
+              }`}
+            >
+              {detail.share_enabled ? "활성" : "회수됨"}
+            </span>
+          </div>
+          <p className="text-xs text-ink-600 mt-1 leading-relaxed">
+            이 링크를 추천대상자에게 전달하면 본인 정보를 직접 추가할 수 있습니다.
+            {detail.share_expires_at &&
+              ` 만료일: ${new Date(detail.share_expires_at).toLocaleDateString("ko-KR")}`}
+          </p>
+          {detail.share_enabled ? (
+            <>
+              <ShareLinkBox token={detail.share_token} />
+              <div className="mt-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={savingShare}
+                  onClick={() => {
+                    if (
+                      confirm(
+                        "공유 링크를 회수하면 더 이상 대상자가 추가할 수 없습니다. 진행할까요?"
+                      )
+                    )
+                      onToggleShare(false);
+                  }}
+                >
+                  {savingShare ? "처리 중..." : "링크 회수"}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="mt-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={savingShare}
+                onClick={() => onToggleShare(true)}
+              >
+                {savingShare ? "처리 중..." : "링크 다시 활성화"}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 데스크탑/태블릿 — 표 */}
       <div className="hidden md:block krds-card overflow-hidden">
         <div className="overflow-x-auto">
@@ -311,13 +493,14 @@ export default function RecipientListPage() {
                 <th>소속</th>
                 <th>직위</th>
                 <th>공적분야</th>
+                <th>표창일</th>
                 <th className="text-right">조치</th>
               </tr>
             </thead>
             <tbody>
               {detail.recipients.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center text-ink-500 py-8">
+                  <td colSpan={8} className="text-center text-ink-500 py-8">
                     대상자가 없습니다. 우측 상단에서 추가하거나 XLSX를 업로드하세요.
                   </td>
                 </tr>
@@ -336,6 +519,50 @@ export default function RecipientListPage() {
                     <td>{r.organization_name || "-"}</td>
                     <td>{r.recipient_position_title || "-"}</td>
                     <td>{r.merit_category || "-"}</td>
+                    <td className="whitespace-nowrap">
+                      {editRcpDateId === r.id ? (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="w-28 inline-block">
+                            <DateInput
+                              value={rcpDateDraft}
+                              onChange={setRcpDateDraft}
+                              autoFocus
+                              placeholder="예: 2026.07.25"
+                              onKeyDown={e => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  saveRcpDate(r.id);
+                                } else if (e.key === "Escape") {
+                                  cancelEditRcpDate();
+                                }
+                              }}
+                            />
+                          </span>
+                          <Button
+                            size="sm"
+                            onClick={() => saveRcpDate(r.id)}
+                            disabled={savingRcpDate}
+                          >
+                            저장
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={cancelEditRcpDate}>
+                            취소
+                          </Button>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1">
+                          <span>{r.award_date || detail.award_date || "미정"}</span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => startEditRcpDate(r)}
+                            title="표창일 수정"
+                          >
+                            ✎
+                          </Button>
+                        </span>
+                      )}
+                    </td>
                     <td className="text-right">
                       <div className="inline-flex gap-1.5">
                         <Button
@@ -349,21 +576,24 @@ export default function RecipientListPage() {
                         </Button>
                         <Button
                           size="sm"
-                          variant="secondary"
-                          onClick={() =>
-                            navigate(`/recipients/${r.id}/preview`)
-                          }
-                        >
-                          미리보기
-                        </Button>
-                        <Button
-                          size="sm"
+                          variant={r.admin_reviewed ? "secondary" : "primary"}
                           onClick={() =>
                             navigate(`/recipients/${r.id}/admin-review`)
                           }
+                          title={r.admin_reviewed ? "검토 완료 (다시 보기)" : "관리자 검토 필요"}
                         >
-                          검토
+                          {r.admin_reviewed ? "✓ 검토완료" : "검토"}
                         </Button>
+                        {r.admin_reviewed && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => onCancelReview(r.id, r.recipient_name)}
+                            title="검토 완료 해제(미검토로)"
+                          >
+                            검토취소
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="danger"
@@ -416,6 +646,39 @@ export default function RecipientListPage() {
                 <dd className="col-span-2 text-ink-800">
                   {r.recipient_position_title || "-"}
                 </dd>
+                <dt className="text-ink-500">표창일</dt>
+                <dd className="col-span-2 text-ink-800">
+                  {editRcpDateId === r.id ? (
+                    <span className="inline-flex items-center gap-1 flex-wrap">
+                      <span className="w-28 inline-block">
+                        <DateInput
+                          value={rcpDateDraft}
+                          onChange={setRcpDateDraft}
+                          autoFocus
+                          placeholder="예: 2026.07.25"
+                        />
+                      </span>
+                      <Button size="sm" onClick={() => saveRcpDate(r.id)} disabled={savingRcpDate}>
+                        저장
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={cancelEditRcpDate}>
+                        취소
+                      </Button>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      <span>{r.award_date || detail.award_date || "미정"}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => startEditRcpDate(r)}
+                        title="표창일 수정"
+                      >
+                        ✎
+                      </Button>
+                    </span>
+                  )}
+                </dd>
               </dl>
               <div className="mt-4 grid grid-cols-3 gap-2">
                 <Button
@@ -427,17 +690,20 @@ export default function RecipientListPage() {
                 </Button>
                 <Button
                   size="sm"
-                  variant="secondary"
-                  onClick={() => navigate(`/recipients/${r.id}/preview`)}
-                >
-                  미리보기
-                </Button>
-                <Button
-                  size="sm"
+                  variant={r.admin_reviewed ? "secondary" : "primary"}
                   onClick={() => navigate(`/recipients/${r.id}/admin-review`)}
                 >
-                  검토
+                  {r.admin_reviewed ? "✓ 검토완료" : "검토"}
                 </Button>
+                {r.admin_reviewed && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onCancelReview(r.id, r.recipient_name)}
+                  >
+                    검토취소
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="danger"

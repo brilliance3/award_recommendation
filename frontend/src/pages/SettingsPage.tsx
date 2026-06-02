@@ -182,21 +182,6 @@ export default function SettingsPage() {
               }
             />
           </Field>
-          <Field label="경기도지사 표창 등급">
-            <Input
-              value={setting.governor_award_grade || ""}
-              onChange={e => onSettingField("governor_award_grade", e.target.value)}
-            />
-          </Field>
-          <Field label="도지사 쿼터(의원당/역년)" hint="위원장 포함 동일 한도">
-            <Input
-              type="number"
-              value={setting.governor_quota_per_year ?? 1}
-              onChange={e =>
-                onSettingField("governor_quota_per_year", Number(e.target.value) || 0)
-              }
-            />
-          </Field>
         </div>
 
         <h2 className="krds-section-title pt-2">현지조사자</h2>

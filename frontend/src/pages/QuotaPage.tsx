@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getQuotaStatus } from "../api";
+import { getQuotaStatus, setGovernorMark } from "../api";
 import type { QuotaResponse } from "../api/dashboards";
 import { Button } from "../components/Field";
 
@@ -9,12 +9,47 @@ export default function QuotaPage() {
   const [data, setData] = useState<QuotaResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [savingGov, setSavingGov] = useState<string | null>(null);
+
+  // 경기도지사 표창 사용 체크/해제 — 낙관적 갱신 후 실패 시 롤백
+  const onToggleGovernor = async (name: string, next: boolean) => {
+    setSavingGov(name);
+    setData(prev =>
+      prev
+        ? {
+            ...prev,
+            rows: prev.rows.map(r =>
+              r.legislator_name === name ? { ...r, governor_used: next } : r
+            ),
+          }
+        : prev
+    );
+    try {
+      await setGovernorMark(name, next);
+    } catch {
+      setData(prev =>
+        prev
+          ? {
+              ...prev,
+              rows: prev.rows.map(r =>
+                r.legislator_name === name
+                  ? { ...r, governor_used: !next }
+                  : r
+              ),
+            }
+          : prev
+      );
+      alert("도지사 표창 체크 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setSavingGov(null);
+    }
+  };
 
   const applyUrl =
     typeof window !== "undefined" ? `${window.location.origin}/apply` : "/apply";
 
   const goToCases = (name: string) =>
-    navigate(`/all-cases?legislator=${encodeURIComponent(name)}`);
+    navigate(`/?legislator=${encodeURIComponent(name)}`);
 
   const onCopyApplyUrl = async () => {
     try {
@@ -51,8 +86,8 @@ export default function QuotaPage() {
           </p>
           <p className="krds-page-sub mt-0.5">
             경기도지사 표창: {fmtDate(data.calendar_start)} ~{" "}
-            {fmtDate(data.calendar_end)} (임기 기준) · 의원당{" "}
-            {data.rows[0]?.governor_max ?? 1}명 (위원장 포함 동일)
+            {fmtDate(data.calendar_end)} (임기 기준) · 의원당 1명 — 처리하면
+            체크만 하세요
           </p>
         </div>
       </div>
@@ -103,7 +138,7 @@ export default function QuotaPage() {
                 <th className="text-center">남은</th>
                 <th className="text-center">진행률</th>
                 <th className="text-center">케이스 수</th>
-                <th className="text-center">도지사 표창<br /><span className="text-[10px] font-normal text-ink-400">임기 기준·사용/한도</span></th>
+                <th className="text-center">도지사 표창<br /><span className="text-[10px] font-normal text-ink-400">처리 시 체크(연 1건)</span></th>
               </tr>
             </thead>
             <tbody>
@@ -113,6 +148,8 @@ export default function QuotaPage() {
                   idx={idx}
                   r={r}
                   onName={() => goToCases(r.legislator_name)}
+                  onToggleGovernor={onToggleGovernor}
+                  savingGov={savingGov === r.legislator_name}
                 />
               ))}
             </tbody>
@@ -174,20 +211,26 @@ export default function QuotaPage() {
               <dt className="text-ink-500">케이스</dt>
               <dd className="col-span-2 text-ink-800">{r.case_count}건</dd>
               <dt className="text-ink-500">도지사 표창</dt>
-              <dd
-                className={
-                  "col-span-2 font-semibold " +
-                  (r.governor_remaining < 0
-                    ? "text-danger-600"
-                    : r.governor_remaining === 0
-                    ? "text-warn-600"
-                    : "text-success-600")
-                }
-              >
-                {r.governor_used}명{" "}
-                <span className="text-ink-400 font-normal">
-                  / {r.governor_max}명
-                </span>
+              <dd className="col-span-2">
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-brand-600 cursor-pointer disabled:opacity-50"
+                    checked={r.governor_used}
+                    disabled={savingGov === r.legislator_name}
+                    onChange={e =>
+                      onToggleGovernor(r.legislator_name, e.target.checked)
+                    }
+                  />
+                  <span
+                    className={
+                      "font-semibold " +
+                      (r.governor_used ? "text-success-700" : "text-ink-500")
+                    }
+                  >
+                    {r.governor_used ? "사용함" : "미사용"}
+                  </span>
+                </label>
               </dd>
             </dl>
             {!r.is_chair && (
@@ -204,10 +247,14 @@ function QuotaTableRow({
   idx,
   r,
   onName,
+  onToggleGovernor,
+  savingGov,
 }: {
   idx: number;
   r: import("../api/dashboards").QuotaRow;
   onName: () => void;
+  onToggleGovernor: (name: string, next: boolean) => void;
+  savingGov: boolean;
 }) {
   const remaining = r.remaining ?? 0;
   const danger = !r.is_chair && remaining < 0;
@@ -261,18 +308,15 @@ function QuotaTableRow({
         )}
       </td>
       <td className="text-center text-ink-700">{r.case_count}건</td>
-      <td
-        className={
-          "text-center font-bold " +
-          (r.governor_remaining < 0
-            ? "text-danger-600"
-            : r.governor_remaining === 0
-            ? "text-warn-600"
-            : "text-success-700")
-        }
-        title="경기도지사 표창 (역년 1.1~12.31)"
-      >
-        {r.governor_used}/{r.governor_max}
+      <td className="text-center" title="경기도지사 표창 처리 완료 시 체크(연 1건)">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-brand-600 cursor-pointer disabled:opacity-50"
+          checked={r.governor_used}
+          disabled={savingGov}
+          onChange={e => onToggleGovernor(r.legislator_name, e.target.checked)}
+          aria-label={`${r.legislator_name} 경기도지사 표창 사용 체크`}
+        />
       </td>
     </tr>
   );

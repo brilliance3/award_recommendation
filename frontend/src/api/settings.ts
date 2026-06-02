@@ -7,8 +7,6 @@ export interface AppSetting {
   award_grade?: string;
   recommender_position?: string;
   quota_per_legislator?: number;
-  governor_award_grade?: string;
-  governor_quota_per_year?: number;
   investigator_department?: string;
   investigator_position?: string;
   investigator_rank?: string;

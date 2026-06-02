@@ -47,6 +47,7 @@ class AwardCaseUpdate(BaseModel):
     status: Optional[str] = None
     seal_applied: Optional[bool] = None
     chair_sign: Optional[bool] = None
+    share_enabled: Optional[bool] = None  # 공유 링크 회수(False) 토글
 
 
 class AwardCaseRead(AwardCaseBase):
@@ -56,10 +57,19 @@ class AwardCaseRead(AwardCaseBase):
     created_at: datetime
     updated_at: datetime
     recipient_count: int = 0
+    # 표창일이 대상자 개인 단위가 되며, 대표(최솟값) award_date 외에 서로 다른 날짜 개수.
+    # 1보다 크면 목록에서 '복수' 표시.
+    award_date_count: int = 0
+    # 기관 대표 신청 공유 링크(자가추가용) — 담당자 화면에서 복사·회수에 사용
+    share_token: Optional[str] = None
+    share_enabled: bool = True
+    share_expires_at: Optional[datetime] = None
 
 
 class AwardCaseDetail(AwardCaseRead):
     recipients: List[RecipientRead] = []
+    # 모든 대상자 관리자 검토 완료 여부 — True여야 문서 생성 가능(서버 계산)
+    all_reviewed: bool = False
 
 
 class AwardCasePreview(AwardCaseRead):

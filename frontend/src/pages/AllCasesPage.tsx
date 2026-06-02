@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { getAllCases, updateCase, listLegislators } from "../api";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  getAllCases,
+  updateCase,
+  listLegislators,
+  deleteCase,
+  trashAllCases,
+} from "../api";
 import type { CasesResponse, CaseRow } from "../api/dashboards";
 import { CASE_STATUSES, CASE_STATUS_LABELS } from "../api/dashboards";
 import type { Legislator } from "../api/settings";
+import { Button } from "../components/Field";
 
 const STATUS_COLOR: Record<string, string> = {
   대기: "bg-ink-100 text-ink-700",
@@ -16,6 +23,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 export default function AllCasesPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [data, setData] = useState<CasesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
@@ -25,16 +33,48 @@ export default function AllCasesPage() {
   );
   const [legislators, setLegislators] = useState<Legislator[]>([]);
 
+  const load = () => {
+    setLoading(true);
+    getAllCases()
+      .then(setData)
+      .finally(() => setLoading(false));
+  };
+
   useEffect(() => {
     listLegislators().then(setLegislators).catch(() => {});
   }, []);
 
   useEffect(() => {
-    setLoading(true);
-    getAllCases()
-      .then(setData)
-      .finally(() => setLoading(false));
+    load();
   }, []);
+
+  const onDelete = async (row: CaseRow) => {
+    if (
+      !confirm(
+        "이 표창 건을 휴지통으로 보냅니다. (휴지통에서 복구할 수 있습니다)"
+      )
+    )
+      return;
+    try {
+      await deleteCase(row.id);
+      load();
+    } catch (err: any) {
+      alert("삭제 실패: " + (err?.response?.data?.detail || err?.message || ""));
+    }
+  };
+
+  const onTrashAll = async () => {
+    const n = data?.rows.length || 0;
+    if (n === 0) return;
+    if (
+      !confirm(
+        `관리 중인 표창건 ${n}건을 모두 휴지통으로 보냅니다.\n(휴지통에서 복구할 수 있습니다) 계속할까요?`
+      )
+    )
+      return;
+    await trashAllCases();
+    load();
+  };
 
   // 필터 드롭다운 옵션 (추천의원·표창일은 데이터에서 추출)
   const recommenderOptions = useMemo(
@@ -123,11 +163,28 @@ export default function AllCasesPage() {
     <div>
       <div className="krds-page-header">
         <div>
-          <h1 className="krds-page-title">전체 표창 현황</h1>
+          <h1 className="krds-page-title">표창 관리</h1>
           <p className="krds-page-sub">
-            회기년도 {fmtDate(data.term_start)} ~ {fmtDate(data.term_end)} ·{" "}
-            {filtered.length}건 / 대상자 {totalRecipients}명
+            전체 {filtered.length}건 / 대상자 {totalRecipients}명 · 현재 회기{" "}
+            {fmtDate(data.term_start)} ~ {fmtDate(data.term_end)}
           </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="md"
+            onClick={() => navigate("/cases/new")}
+            className="w-full sm:w-auto"
+          >
+            <span aria-hidden>＋</span> 새 표창 건 만들기
+          </Button>
+          <Button
+            size="md"
+            variant="secondary"
+            onClick={() => navigate("/trash")}
+            className="w-full sm:w-auto"
+          >
+            🗑 휴지통
+          </Button>
         </div>
       </div>
 
@@ -193,18 +250,20 @@ export default function AllCasesPage() {
                 <th className="w-12 text-center">No</th>
                 <th>상태</th>
                 <th>표창건명</th>
+                <th>훈격</th>
                 <th>추천의원</th>
                 <th className="text-center">인원</th>
                 <th>대상자</th>
                 <th>공적제출일</th>
                 <th>발급목표일</th>
                 <th>표창일 ↓</th>
+                <th className="text-right">조치</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center text-ink-500 py-8">
+                  <td colSpan={11} className="text-center text-ink-500 py-8">
                     해당하는 표창 건이 없습니다.
                   </td>
                 </tr>
@@ -220,12 +279,29 @@ export default function AllCasesPage() {
                         {r.title}
                       </Link>
                     </td>
+                    <td>
+                      {r.award_grade ? (
+                        <span className="krds-badge krds-badge-brand whitespace-nowrap">
+                          {r.award_grade}
+                        </span>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
                     <td className="font-semibold">
                       <RecommenderSelect
                         row={r}
                         legislators={legislators}
                         onChange={onRecommenderChange}
                       />
+                      {r.chair_sign && (
+                        <span
+                          className="krds-badge krds-badge-accent mt-1 inline-block"
+                          title="문서가 위원장 명의로 출력됩니다(쿼터 통계는 원래 추천의원에 집계)."
+                        >
+                          위원장 명의로 제출
+                        </span>
+                      )}
                     </td>
                     <td className="text-center">
                       <span className="krds-badge krds-badge-ink">
@@ -240,7 +316,23 @@ export default function AllCasesPage() {
                     </td>
                     <td className="text-ink-700 whitespace-nowrap">{r.recommendation_date || "-"}</td>
                     <td className="text-ink-700 whitespace-nowrap">{r.target_issue_date || "-"}</td>
-                    <td className="text-ink-700 whitespace-nowrap">{r.award_date || "-"}</td>
+                    <td className="text-ink-700 whitespace-nowrap">
+                      {r.award_date || "-"}
+                      {(r.award_date_count || 0) > 1 && (
+                        <span className="text-ink-500">
+                          {" "}외 {(r.award_date_count || 1) - 1}
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-right">
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => onDelete(r)}
+                      >
+                        삭제
+                      </Button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -266,9 +358,22 @@ export default function AllCasesPage() {
               </Link>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <StatusSelector row={r} onChange={onStatusChange} />
-                <span className="krds-badge krds-badge-brand">
+                {r.award_grade && (
+                  <span className="krds-badge krds-badge-brand">
+                    {r.award_grade}
+                  </span>
+                )}
+                <span className="krds-badge krds-badge-ink">
                   {r.recommender_name || "추천자 미지정"}
                 </span>
+                {r.chair_sign && (
+                  <span
+                    className="krds-badge krds-badge-accent"
+                    title="문서가 위원장 명의로 출력됩니다(쿼터 통계는 원래 추천의원에 집계)."
+                  >
+                    위원장 명의로 제출
+                  </span>
+                )}
                 <span className="krds-badge krds-badge-ink">
                   {r.recipient_count}명
                 </span>
@@ -293,12 +398,36 @@ export default function AllCasesPage() {
                 <dt className="text-ink-500">표창일</dt>
                 <dd className="col-span-2 text-ink-800">
                   {r.award_date || "-"}
+                  {(r.award_date_count || 0) > 1 && (
+                    <span className="text-ink-500">
+                      {" "}외 {(r.award_date_count || 1) - 1}일(대상자별)
+                    </span>
+                  )}
                 </dd>
               </dl>
+              <div className="mt-4 flex justify-end">
+                <Button size="sm" variant="danger" onClick={() => onDelete(r)}>
+                  삭제
+                </Button>
+              </div>
             </li>
           ))
         )}
       </ul>
+
+      {(data.rows.length || 0) > 0 && (
+        <div className="mt-8 rounded-lg border border-danger-200 bg-danger-50/40 p-4">
+          <h2 className="text-sm font-bold text-danger-700">전체 삭제</h2>
+          <p className="text-xs text-ink-600 mt-0.5">
+            관리 중인 표창건을 한 번에 휴지통으로 보냅니다 (휴지통에서 복구 가능).
+          </p>
+          <div className="mt-3">
+            <Button size="sm" variant="ghost" onClick={onTrashAll}>
+              전체 삭제 (휴지통으로)
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

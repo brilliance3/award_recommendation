@@ -63,15 +63,16 @@ export const submitChecklist = (recipientId: string, payload: ChecklistSubmit) =
     .post<ChecklistRead>(`/api/checklist/${recipientId}/submit`, payload)
     .then(r => r.data);
 
-export const getRecipientChecklist = (recipientId: string) =>
-  api
-    .get<ChecklistRead>(`/api/recipients/${recipientId}/checklist`)
-    .then(r => r.data);
-
 export const submitAdminReview = (recipientId: string, payload: AdminReviewSubmit) =>
   api
     .patch<ChecklistRead>(
       `/api/recipients/${recipientId}/checklist/admin-review`,
       payload
     )
+    .then(r => r.data);
+
+// 관리자 검토 완료 표시를 해제(미검토로 되돌리기)
+export const cancelAdminReview = (recipientId: string) =>
+  api
+    .delete<ChecklistRead>(`/api/recipients/${recipientId}/checklist/admin-review`)
     .then(r => r.data);

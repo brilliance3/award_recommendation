@@ -27,6 +27,7 @@ class RecipientBase(BaseModel):
     merit_category: Optional[str] = None
     merit_period: Optional[str] = None
     recommendation_rank: Optional[str] = "1순위"
+    award_date: Optional[date] = None  # 표창일(대상자 개인 단위)
     note: Optional[str] = None
 
 
@@ -51,6 +52,7 @@ class RecipientUpdate(BaseModel):
     merit_category: Optional[str] = None
     merit_period: Optional[str] = None
     recommendation_rank: Optional[str] = None
+    award_date: Optional[date] = None  # 표창일(대상자 개인 단위) 수정
     note: Optional[str] = None
 
 
@@ -61,6 +63,8 @@ class RecipientRead(RecipientBase):
     award_case_id: str
     created_at: datetime
     updated_at: datetime
+    # 관리자 검토(공직선거법) 완료 여부 — checklist.admin_reviewed_at 기반(서버 계산)
+    admin_reviewed: bool = False
 
 
 class RecipientDetail(RecipientRead):

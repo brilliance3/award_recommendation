@@ -1,5 +1,5 @@
 """대상자 자가 체크리스트 API"""
-from datetime import date, datetime
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -130,12 +130,14 @@ def submit_admin_review(
 ):
     """관리자(전문위원실)가 공직선거법 검토 결과를 저장"""
     r = get_recipient_or_404(db, recipient_id)
-    if not r.checklist:
-        raise HTTPException(
-            status_code=400,
-            detail="대상자가 체크리스트를 먼저 제출해야 관리자 검토가 가능합니다",
-        )
     cl = r.checklist
+    if cl is None:
+        # 자가 체크리스트가 없는 대상자(수동/XLSX 추가)도 담당자가 공직선거법 검토를
+        # 할 수 있도록 빈 체크리스트를 생성해 검토 결과를 붙인다.
+        cl = models.Checklist(recipient_id=r.id)
+        db.add(cl)
+        db.flush()
+        r.checklist = cl
     cl.admin_election_law_general = payload.admin_election_law_general
     cl.admin_election_law_general_note = payload.admin_election_law_general_note
     cl.admin_election_law_basis = payload.admin_election_law_basis
@@ -144,6 +146,26 @@ def submit_admin_review(
     cl.admin_election_law_art112_note = payload.admin_election_law_art112_note
     cl.admin_reviewer_name = payload.admin_reviewer_name
     cl.admin_reviewed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(cl)
+    return cl
+
+
+@router.delete(
+    "/api/recipients/{recipient_id}/checklist/admin-review",
+    response_model=schemas.ChecklistRead,
+)
+def cancel_admin_review(recipient_id: str, db: Session = Depends(get_db)):
+    """관리자 검토 결과를 '미검토'로 되돌린다(검토 완료 표시 해제).
+
+    검토 완료 표시(admin_reviewed_at·검토자명)만 지운다. 입력했던 공직선거법 검토값은
+    남겨 재검토 시 그대로 보이게 한다. 체크리스트가 없으면 변경 없이 반환."""
+    r = get_recipient_or_404(db, recipient_id)
+    cl = r.checklist
+    if cl is None:
+        raise HTTPException(status_code=400, detail="검토 내역이 없습니다.")
+    cl.admin_reviewed_at = None
+    cl.admin_reviewer_name = None
     db.commit()
     db.refresh(cl)
     return cl

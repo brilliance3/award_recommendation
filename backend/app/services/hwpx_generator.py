@@ -22,7 +22,7 @@ from pathlib import Path
 
 from lxml import etree
 
-from ..config import DEFAULT_INVESTIGATOR, GENERATED_DIR
+from ..config import GENERATED_DIR
 from ..models import AwardCase, Recipient
 
 TEMPLATE_PATH = (
@@ -289,8 +289,11 @@ def _normalize_header_fonts(header_bytes: bytes) -> bytes:
 def _fix_report_header(header_bytes: bytes) -> bytes:
     """02 공적조서 전용 header 보정.
 
-    - 추천사유(paraPr 54)·공적요지(32)·공적사항(23)의 첫줄 내어쓰기(intent 음수)를 0으로
+    - 확인문구(paraPr 54)·공적요지(32)·공적사항(23)의 첫줄 내어쓰기(intent 음수)를 0으로
       → 모든 줄이 같은 세로선에 정렬.
+    - 추천사유(paraPr 52, "- 상기인은 ~ 상신함")는 내어쓰기를 유지하되 폭을 "- "(13pt)
+      한 칸 = 1071 HWPUNIT으로 줄여, 둘째 줄부터가 첫 줄의 '상기인은' 시작점에 정렬되게 한다.
+      (기존 -8110은 약 6글자폭이라 둘째 줄이 과하게 들여써졌다.)
     - 공적사항 글자(charPr 14)가 height 400(다른 셀 1300의 1/3)으로 작게 나오므로 1300으로 통일.
     각 ID는 해당 항목 전용이라 다른 곳에 영향 없음.
     """
@@ -305,6 +308,11 @@ def _fix_report_header(header_bytes: bytes) -> bytes:
             for c in e.iter():
                 if ln(c) == "intent":
                     c.set("value", "0")
+        elif lname == "paraPr" and e.get("id") == "52":
+            # 추천사유: 내어쓰기 폭을 "- " 한 칸(1071)으로 → 둘째 줄이 '상기인은'에 정렬
+            for c in e.iter():
+                if ln(c) == "intent":
+                    c.set("value", "-1071")
         elif lname == "charPr" and e.get("id") == "14":
             e.set("height", "1300")
         elif lname == "charPr" and e.get("id") in ("37", "38"):
@@ -374,59 +382,13 @@ def _adjust_header_spacing(
                         c.set("value", str(next_))
             elif t == "lineSpacing":
                 try:
-                    if int(c_val := sub.get("value", "0")) < min_line:
+                    if int(sub.get("value", "0")) < min_line:
                         sub.set("value", str(min_line))
                 except ValueError:
                     pass
     return etree.tostring(
         root, xml_declaration=True, encoding="UTF-8", standalone=True
     )
-
-
-def _finalize_header_layout(header_bytes: bytes) -> bytes:
-    """정렬용 신규 paraPr 추가 + 현지조사자 소속/직급/성명 paraPr(59) 정렬 변경.
-
-    - paraPr 25(JUSTIFY)를 복제하여 73(RIGHT)·74(CENTER) 생성 (위기록·본문표 날짜용)
-    - paraPr 59(소속/직급/성명) → 왼쪽 정렬 + 들여쓰기(margin left)로 세로 정렬 + 오른쪽 배치
-    """
-    import copy as _copy
-
-    root = etree.fromstring(header_bytes)
-
-    def ln(e):
-        return etree.QName(e.tag).localname
-
-    pp25 = container = None
-    for el in root.iter():
-        if ln(el) == "paraPr" and el.get("id") == "25":
-            pp25 = el
-            container = el.getparent()
-            break
-
-    if pp25 is not None and container is not None:
-        for new_id, align in ((_ALIGN_RIGHT_PARA, "RIGHT"), (_ALIGN_CENTER_PARA, "CENTER")):
-            new_pr = _copy.deepcopy(pp25)
-            new_pr.set("id", new_id)
-            for c in new_pr.iter():
-                if ln(c) == "align":
-                    c.set("horizontal", align)
-            container.append(new_pr)
-        try:
-            container.set("itemCnt", str(int(container.get("itemCnt")) + 2))
-        except (TypeError, ValueError):
-            pass
-
-    # 소속/직급/성명(paraPr 59)을 왼쪽 정렬 + 들여쓰기(intent)/여백 0으로 → 앞 공백만으로
-    # 소/직/성 시작이 같은 세로선에 정렬되게. (현지조사자)(paraPr 58)는 원본 LEFT 유지.
-    for el in root.iter():
-        if ln(el) == "paraPr" and el.get("id") == "59":
-            for c in el.iter():
-                if ln(c) == "align":
-                    c.set("horizontal", "LEFT")
-                elif ln(c) in ("left", "right", "intent"):
-                    c.set("value", "0")
-
-    return etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
 
 
 def _charpr_heights(header_bytes: bytes) -> dict:
@@ -443,32 +405,6 @@ def _charpr_heights(header_bytes: bytes) -> dict:
         except ValueError:
             pass
     return m
-
-
-def _needed_line_count(p, tc, text: str, charpr_heights: dict) -> int:
-    """문단 text가 셀(tc) 폭에 들어가는 데 필요한 줄 수(rhwp measure식 근사).
-
-    글자폭: 한글/한자/전각(비ASCII)=글자크기, ASCII=글자크기*0.55 (rhwp 렌더 shim과 동일).
-    """
-    if tc is None or not charpr_heights:
-        return 999  # 정보가 없으면 '긴 셀'로 간주해 제거 쪽으로
-    csz = tc.find("hp:cellSz", NS)
-    if csz is None:
-        return 999
-    try:
-        width = int(csz.get("width") or 0)
-    except ValueError:
-        return 999
-    cm = tc.find("hp:cellMargin", NS)
-    ml = int(cm.get("left") or 141) if cm is not None else 141
-    mr = int(cm.get("right") or 141) if cm is not None else 141
-    avail = max(1, width - ml - mr)
-    run = p.find("hp:run", NS)
-    fs = charpr_heights.get(run.get("charPrIDRef") if run is not None else None, 1000)
-    w = 0.0
-    for ch in text:
-        w += fs if ord(ch) > 0x2000 else fs * 0.55  # 비ASCII(한글/한자/전각)=전각폭
-    return max(1, -int(-w // avail))  # ceil
 
 
 def _strip_linesegarray(section_bytes: bytes, charpr_heights: dict = None) -> bytes:
@@ -504,15 +440,13 @@ def _save_hwpx(
     new_section: bytes,
     normalize_fonts: bool = False,
     spacing_para_ids: set = None,
-    apply_report_layout: bool = False,
     report_fix: bool = False,
     merit_detail_charprs: set = None,
 ) -> None:
     """원본 zip을 그대로 복사하되 Contents/section0.xml만 교체.
     mimetype은 STORED(비압축)로 저장하여 OWPML 규약을 유지.
     normalize_fonts=True이면 header.xml 폰트를 경기천년체로 정규화 (PDF 변환용).
-    spacing_para_ids가 주어지면 해당 본문 paraPr의 단락 여백·행간을 늘려 서식을 여유롭게.
-    apply_report_layout=True이면 02 공적조서 전용 정렬 paraPr(73/74) 생성·59 정렬 적용."""
+    spacing_para_ids가 주어지면 해당 본문 paraPr의 단락 여백·행간을 늘려 서식을 여유롭게."""
     # 한컴 stale 줄 캐시 경고 방지 — 텍스트가 있는 문단의 linesegarray만 제거하고 빈 문단 캐시는 보존한다.
     with zipfile.ZipFile(template_path, "r") as ztmp:
         _hdr_bytes = ztmp.read("Contents/header.xml")
@@ -529,8 +463,6 @@ def _save_hwpx(
                         data = _adjust_header_spacing(
                             data, spacing_para_ids, prev=140, next_=140, min_line=140
                         )
-                    if apply_report_layout:
-                        data = _finalize_header_layout(data)
                     if report_fix:
                         data = _fix_report_header(data)
                     if merit_detail_charprs:
@@ -649,9 +581,12 @@ def generate_merit_report_hwpx(
     if rec_name and rec_full_base.rstrip().endswith(rec_name):
         rec_full_base = rec_full_base.rstrip()[: -len(rec_name)].rstrip()
     confirm_date = _fmt_dot_date(case.created_at)
-    survey_date = _fmt_korean_date(case.seal_applied_at)
-    body_date = _fmt_korean_date(case.seal_applied_at)  # 본문표 추천관(인) 확인 날짜 = 도장일
-    award_date_short = _fmt_award_date_short(case.award_date)
+    # 서식2 본문표 추천관 확인일 + 현지조사확인서 날짜.
+    # 과거엔 도장일(seal_applied_at)을 썼으나 도장 워크플로 제거 후 미설정 → 라이브에서
+    # 빈 칸이 됨. 도장일 없으면 공적제출일(recommendation_date), 그것도 없으면 생성일로 폴백.
+    _doc_date = case.seal_applied_at or case.recommendation_date or case.created_at
+    survey_date = _fmt_korean_date(_doc_date)
+    body_date = _fmt_korean_date(_doc_date)
     signoff = (
         f"추 천 관    {rec_full_base}   {rec_name}    (인)"
         if rec_full_base
@@ -674,9 +609,9 @@ def generate_merit_report_hwpx(
     _replace_paragraph_starting_with(root, "추천(의뢰)자", _recommender_line(rec_full_base, rec_name))
 
     # --- 추천개요 표 (tbl#0, 14셀: 헤더 0~6, 데이터 7~13) ---
-    _fill_report_overview_row(tables[0].findall(".//hp:tc", NS), recipients[0], award_date_short)
+    _fill_report_overview_row(tables[0].findall(".//hp:tc", NS), recipients[0], case.award_date)
     if len(recipients) > 1:
-        _duplicate_overview_rows(tables[0], recipients, award_date_short)
+        _duplicate_overview_rows(tables[0], recipients, case.award_date)
 
     # --- 첫 대상자: 본문표(tbl#1) + 경력표(tbl#2) + 현지조사(root paragraph) ---
     _fill_merit_main_table(
@@ -881,7 +816,6 @@ def generate_merit_report_hwpx(
         new_section,
         normalize_fonts=True,
         spacing_para_ids=body_para_ids,
-        apply_report_layout=False,
         report_fix=True,
         merit_detail_charprs=merit_detail_charprs,
     )
@@ -906,8 +840,6 @@ def _assert_merit_report_invariants(out_path, recipients, award_grade, inv) -> N
     - 작성자 입력: (1)성명·(6)주소·(7)직업·(8)소속이 해당 셀에 정확히 들어감
     - 조사자: (17)소속=설정 부서명, (20)성명=조사자 이름
     """
-    import re
-
     with zipfile.ZipFile(out_path) as z:
         header = z.read("Contents/header.xml").decode("utf-8")
         root = etree.fromstring(z.read("Contents/section0.xml"))
@@ -1044,21 +976,33 @@ def _remove_external_title_footnote(root) -> None:
             t.text = ""
 
 
-def _fill_report_overview_row(cells, r, award_date_short: str) -> None:
+def _overview_org_or_address(r) -> str:
+    """페이지1 추천개요 표 '소속기관(없을 경우 주소)' 칸 값.
+
+    소속이 없으면(빈값 또는 정확히 '개인') 주소를 표시한다. '개인사업자' 등 '개인'으로
+    시작하는 정상 단체명은 그대로 둔다(정확 일치만 치환). 주소도 없으면 빈칸."""
+    org = (r.organization_name or "").strip()
+    if org in ("", "개인"):
+        return r.address or ""
+    return r.organization_name
+
+
+def _fill_report_overview_row(cells, r, fallback_date) -> None:
     """02 공적조서 페이지1 추천개요 표(tbl#0) 데이터 행(셀 7~13):
-    이름/생년월일/소속/직위/공적분야/공적기간/표창일."""
+    이름/생년월일/소속기관(없을 경우 주소)/직위/공적분야/공적기간/표창일.
+    표창일은 대상자 개인 award_date(미설정 시 fallback_date=case.award_date)."""
     if len(cells) < 14:
         return
     _set_first_text(cells[7], r.recipient_name or "")
     _set_first_text(cells[8], _fmt_birth_dot_short(r.birth_date))
-    _set_first_text(cells[9], r.organization_name or "")
+    _set_first_text(cells[9], _overview_org_or_address(r))
     _set_first_text(cells[10], r.recipient_position_title or "")
     _set_first_text(cells[11], r.merit_category or "")
     _set_first_text(cells[12], (r.merit_period or "").strip().replace(" ", ""))
-    _set_first_text(cells[13], award_date_short)
+    _set_first_text(cells[13], _fmt_award_date_short(getattr(r, "award_date", None) or fallback_date))
 
 
-def _duplicate_overview_rows(t0, recipients, award_date_short: str) -> None:
+def _duplicate_overview_rows(t0, recipients, fallback_date) -> None:
     """추천개요 표에 2번째 대상자부터 데이터 행 복제 추가 (헤더+데이터 2행 구조)."""
     rows = t0.findall("hp:tr", NS)
     if len(rows) < 2:
@@ -1074,11 +1018,11 @@ def _duplicate_overview_rows(t0, recipients, award_date_short: str) -> None:
         nc = new_row.findall("hp:tc", NS)
         _set_first_text(nc[0], r.recipient_name or "")
         _set_first_text(nc[1], _fmt_birth_dot_short(r.birth_date))
-        _set_first_text(nc[2], r.organization_name or "")
+        _set_first_text(nc[2], _overview_org_or_address(r))
         _set_first_text(nc[3], r.recipient_position_title or "")
         _set_first_text(nc[4], r.merit_category or "")
         _set_first_text(nc[5], (r.merit_period or "").strip().replace(" ", ""))
-        _set_first_text(nc[6], award_date_short)
+        _set_first_text(nc[6], _fmt_award_date_short(getattr(r, "award_date", None) or fallback_date))
         anchor.addnext(new_row)
         anchor = new_row  # 다음 행은 이 행 뒤에 (역순 삽입 버그 수정)
     t0.set("rowCnt", str(1 + len(recipients)))
@@ -1238,7 +1182,6 @@ def _set_para_in_scope(scope, prefix: str, new_text: str) -> bool:
 
 
 def _find_child_index_startswith(children, prefix: str):
-    P = "{http://www.hancom.co.kr/hwpml/2011/paragraph}p"
     for i, el in enumerate(children):
         if etree.QName(el.tag).localname != "p":
             continue
@@ -1250,7 +1193,6 @@ def _find_child_index_startswith(children, prefix: str):
 
 def _strip_trailing_empty_paragraphs(root) -> None:
     """root 끝의 연속된 빈 paragraph를 제거 (대상자 묶음 끝 빈 페이지 방지)."""
-    P = "{http://www.hancom.co.kr/hwpml/2011/paragraph}p"
     for el in reversed(list(root)):
         if etree.QName(el.tag).localname != "p":
             break
@@ -1311,7 +1253,6 @@ def _fit_survey_to_one_page(root) -> None:
     """
     import unicodedata
 
-    P = "{http://www.hancom.co.kr/hwpml/2011/paragraph}p"
     ROW_PX = 32.0
     USABLE_PX = 900.0
     BIG_PX, SMALL_PX = 43.2, 12.8
@@ -1419,26 +1360,6 @@ def _apply_paragraph_alignments(root) -> None:
             for t in ts[1:]:
                 t.text = ""
         # (현지조사자)는 양식 원본(맨 왼쪽, paraPr 58 LEFT) 그대로 둔다.
-
-
-def _add_blank_lines_before(scope, prefix: str, count: int = 2) -> None:
-    """scope 안에서 prefix로 시작하는 모든 paragraph 앞에 빈 paragraph를 count개 삽입.
-
-    빈 paragraph는 대상 paragraph를 deepcopy 후 텍스트를 비워 만든다(스타일 유지).
-    """
-    P = "{http://www.hancom.co.kr/hwpml/2011/paragraph}p"
-    targets = []
-    for p in scope.iter(P):
-        ts = p.findall(".//hp:t", NS)
-        joined = "".join((t.text or "") for t in ts).strip()
-        if joined.startswith(prefix):
-            targets.append(p)
-    for p in targets:
-        for _ in range(count):
-            blank = copy.deepcopy(p)
-            for t in blank.findall(".//hp:t", NS):
-                t.text = ""
-            p.addprevious(blank)
 
 
 def _set_long_text(cell, text: str) -> None:
@@ -1580,6 +1501,20 @@ def generate_checklist_hwpx(case: AwardCase, recipient: Recipient) -> Path:
     tables = root.findall(".//hp:tbl", NS)
     if len(tables) < 2:
         raise RuntimeError(f"체크리스트 양식 표 개수 비정상: {len(tables)}")
+
+    # 상단 표창명·대상자 인원수 (표창건 전체 기준).
+    # 표창명: '{대표 단체명} {첫 대상자명} 등 N명'. 전원 '개인'(단체명 없음)이면 단체명 생략.
+    _recips = list(case.recipients or [])
+    _n = len(_recips)
+    _first = _recips[0].recipient_name if _recips else "대상자"
+    _award_label = f"{_first} 등 {_n}명" if _n > 1 else _first
+    # 단체명은 대표자(첫 대상자)의 소속 기준 — 단체명과 대표자명이 같은 사람이 되도록.
+    # 첫 대상자가 '개인'(또는 소속 없음)이면 단체명을 붙이지 않음(전원 개인 케이스 포함).
+    _first_org = (_recips[0].organization_name or "").strip() if _recips else ""
+    if _first_org and _first_org != "개인":
+        _award_label = f"{_first_org} {_award_label}"
+    _replace_paragraph_starting_with(root, "□ 표창명", f"□ 표창명 : {_award_label}")
+    _replace_paragraph_starting_with(root, "- 대상자", f"- 대상자 : 총 {_n}명")
 
     # 표 #0: 결격여부 검토 (23셀)
     # 셀 5/7/9: 수공기간 (공무원/민간인/단체) 결과 — 사용자 응답으로 모두 동일하게

@@ -1,16 +1,11 @@
 import { api } from "./client";
-import type { AwardCase, AwardCaseDetail, AwardCasePreview, GenerateDocumentResponse, GeneratedFileInfo } from "../types";
-
-export const listCases = () => api.get<AwardCase[]>("/api/award-cases").then(r => r.data);
+import type { AwardCase, AwardCaseDetail, GenerateDocumentResponse, GeneratedFileInfo } from "../types";
 
 export const createCase = (payload: Partial<AwardCase>) =>
   api.post<AwardCase>("/api/award-cases", payload).then(r => r.data);
 
 export const getCase = (id: string) =>
   api.get<AwardCaseDetail>(`/api/award-cases/${id}`).then(r => r.data);
-
-export const getCasePreviewData = (id: string) =>
-  api.get<AwardCasePreview>(`/api/award-cases/${id}/preview-data`).then(r => r.data);
 
 export const updateCase = (id: string, payload: Partial<AwardCase>) =>
   api.patch<AwardCase>(`/api/award-cases/${id}`, payload).then(r => r.data);
@@ -37,9 +32,6 @@ export const restoreAllCases = () =>
 export const emptyTrash = () =>
   api.delete("/api/award-cases/trash/empty").then(r => r.data);
 
-export const generateXlsx = (id: string) =>
-  api.post<GenerateDocumentResponse>(`/api/award-cases/${id}/generate-xlsx`).then(r => r.data);
-
 export const generateRecipientListXlsx = (id: string) =>
   api
     .post<GenerateDocumentResponse>(`/api/award-cases/${id}/generate-recipient-list-xlsx`)
@@ -55,18 +47,10 @@ export const generateReportHwpx = (id: string) =>
     .post<GenerateDocumentResponse>(`/api/award-cases/${id}/generate-report-hwpx`)
     .then(r => r.data);
 
-export const generateReportPdf = (id: string) =>
-  api
-    .post<GenerateDocumentResponse>(`/api/award-cases/${id}/generate-report-pdf`)
-    .then(r => r.data);
-
 export const generateChecklistHwpx = (id: string) =>
   api
     .post<GenerateDocumentResponse>(`/api/award-cases/${id}/generate-checklist-hwpx`)
     .then(r => r.data);
-
-export const generateAll = (id: string) =>
-  api.post<GenerateDocumentResponse>(`/api/award-cases/${id}/generate-all`).then(r => r.data);
 
 export const generateZip = (id: string) =>
   api.post<GeneratedFileInfo>(`/api/award-cases/${id}/generate-zip`).then(r => r.data);
