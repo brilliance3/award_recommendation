@@ -448,9 +448,15 @@ export default function ApplicationFormPage() {
       return;
     }
 
-    if (applicantRole === "organization" && managePw && managePw.length < 4) {
-      setSubmitError("관리 비밀번호는 4자 이상이어야 합니다.");
-      return;
+    if (applicantRole === "organization") {
+      if (!manageUser.trim()) {
+        setSubmitError("담당자용 아이디를 입력해 주세요.");
+        return;
+      }
+      if (managePw.length < 4) {
+        setSubmitError("담당자용 비밀번호(4자 이상)를 설정해 주세요.");
+        return;
+      }
     }
     const payload: ApplicationSubmit = {
       applicant_role: applicantRole,
@@ -664,15 +670,16 @@ export default function ApplicationFormPage() {
           {applicantRole === "organization" && (
             <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-3 sm:p-4">
               <h3 className="text-sm font-bold text-ink-800">
-                관리 화면 보호 비밀번호 <span className="text-ink-500 font-normal">(선택)</span>
+                담당자용 아이디 비밀번호 생성
               </h3>
               <p className="text-xs text-ink-600 mt-1 leading-relaxed">
                 제출 후 받는 <strong>관리 링크</strong>(대상자 검토·수정·최종제출)를
-                보호할 아이디·비밀번호입니다. 설정하면 관리 링크를 열 때 입력해야 합니다.
-                대상자 추가 링크는 비밀번호 없이 개방됩니다. (비워두면 보호 안 함)
+                보호할 아이디·비밀번호입니다. 관리 링크를 열 때 입력해야 하며,
+                <strong> 반드시 설정해야 합니다.</strong> 대상자 추가 링크는 비밀번호 없이
+                개방됩니다.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                <Field label="관리 아이디" hint="비우면 'manage'로 설정">
+                <Field label="담당자용 아이디" required hint="비우면 'manage'로 설정">
                   <Input
                     value={manageUser}
                     onChange={e => setManageUser(e.target.value)}
@@ -680,7 +687,7 @@ export default function ApplicationFormPage() {
                     placeholder="예: 봉사회"
                   />
                 </Field>
-                <Field label="관리 비밀번호" hint="4자 이상">
+                <Field label="담당자용 비밀번호" required hint="4자 이상">
                   <Input
                     type="password"
                     value={managePw}

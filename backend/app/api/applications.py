@@ -229,11 +229,13 @@ def submit_application(
         ),
         applicant_submitted=(payload.applicant_role != "organization"),
     )
-    # 기관 대표가 제출 시 관리 링크 보호 자격을 설정했으면 저장(선택).
-    if payload.applicant_role == "organization" and (payload.manage_password or "").strip():
-        pw = payload.manage_password.strip()
+    # 기관 대표 신청은 관리 링크 보호 자격(담당자용 아이디/비밀번호)을 필수로 설정한다.
+    if payload.applicant_role == "organization":
+        pw = (payload.manage_password or "").strip()
         if len(pw) < 4:
-            raise HTTPException(status_code=400, detail="관리 비밀번호는 4자 이상이어야 합니다")
+            raise HTTPException(
+                status_code=400, detail="담당자용 비밀번호(4자 이상)를 설정해 주세요."
+            )
         case.manage_username = (payload.manage_username or "").strip() or "manage"
         case.manage_password = pw
     db.add(case)
@@ -405,12 +407,8 @@ def change_manage_credentials(
 def _apply_manage_credentials(
     case: models.AwardCase, payload: schemas.ManageCredentialsUpdate
 ) -> None:
-    """관리 자격 적용 — 비밀번호 비면 해제, 있으면 아이디(기본 manage)+비밀번호 설정."""
+    """관리 자격 적용 — 관리 비밀번호는 필수(해제 불가). 아이디 비우면 기본 'manage'."""
     pw = (payload.password or "").strip()
-    if not pw:
-        case.manage_username = None
-        case.manage_password = None
-        return
     if len(pw) < 4:
         raise HTTPException(status_code=400, detail="비밀번호는 4자 이상이어야 합니다")
     case.manage_username = (payload.username or "").strip() or "manage"

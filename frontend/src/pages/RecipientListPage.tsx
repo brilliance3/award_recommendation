@@ -74,21 +74,6 @@ export default function RecipientListPage() {
     }
   };
 
-  const onClearCred = async () => {
-    if (!confirm("자격을 해제하면 링크 주소만 알면 누구나 관리 화면에 접근할 수 있습니다. 진행할까요?"))
-      return;
-    setSavingCred(true);
-    try {
-      const c = await setManageCredentials(caseId, "", "");
-      setManageCred(c);
-      setCredPw("");
-      alert("자격을 해제했습니다.");
-    } catch (err: any) {
-      alert("해제 실패: " + (err?.response?.data?.detail || err?.message || ""));
-    } finally {
-      setSavingCred(false);
-    }
-  };
 
   const load = () => getCase(caseId).then(setDetail);
   useEffect(() => {
@@ -580,17 +565,6 @@ export default function RecipientListPage() {
                   <Button type="button" size="sm" onClick={onSaveCred} disabled={savingCred}>
                     {manageCred.protected ? "자격 재설정" : "자격 설정"}
                   </Button>
-                  {manageCred.protected && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={onClearCred}
-                      disabled={savingCred}
-                    >
-                      자격 해제
-                    </Button>
-                  )}
                 </div>
               </>
             )}

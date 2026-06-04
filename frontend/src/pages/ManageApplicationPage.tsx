@@ -143,27 +143,6 @@ export default function ManageApplicationPage() {
     }
   };
 
-  const onClearCred = async () => {
-    if (
-      !confirm(
-        "관리 비밀번호를 해제하면 링크 주소만 알면 누구나 이 관리 화면에 접근할 수 있습니다. 진행할까요?"
-      )
-    )
-      return;
-    setSavingCred(true);
-    try {
-      await changeManageCredentials(token, "", "", creds ?? undefined);
-      setCreds(null);
-      setCredPw("");
-      await load(null);
-      alert("관리 비밀번호를 해제했습니다.");
-    } catch (err: any) {
-      alert("해제 실패: " + (err?.response?.data?.detail || err?.message || ""));
-    } finally {
-      setSavingCred(false);
-    }
-  };
-
   if (loadError) {
     return (
       <PublicLayout>
@@ -328,17 +307,6 @@ export default function ManageApplicationPage() {
             >
               {info.protected ? "비밀번호 변경" : "비밀번호 설정"}
             </Button>
-            {info.protected && (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={onClearCred}
-                disabled={savingCred}
-              >
-                보호 해제
-              </Button>
-            )}
           </div>
         </div>
 
