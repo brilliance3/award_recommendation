@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
+import AuthGate from "./components/AuthGate";
 import AwardCaseCreatePage from "./pages/AwardCaseCreatePage";
 import RecipientListPage from "./pages/RecipientListPage";
 import RecipientEditPage from "./pages/RecipientEditPage";
@@ -25,7 +26,14 @@ export default function App() {
       <Route path="/apply/add/:token" element={<AddRecipientPage />} />
       {/* 기관 대표 전용 — 검토·최종 제출 관리 */}
       <Route path="/apply/manage/:token" element={<ManageApplicationPage />} />
-      <Route element={<Layout />}>
+      {/* 관리자 영역 — 로그인 필요 (공개 신청 흐름 /apply* 는 게이트 밖) */}
+      <Route
+        element={
+          <AuthGate>
+            <Layout />
+          </AuthGate>
+        }
+      >
         {/* 관리·전체현황 통합 페이지 */}
         <Route path="/" element={<AllCasesPage />} />
         <Route path="/quota" element={<QuotaPage />} />

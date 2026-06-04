@@ -87,18 +87,32 @@ def create_app() -> FastAPI:
         "/api/auth/me",
     }
 
+    def _is_public_api(path: str, method: str) -> bool:
+        """로그인 없이 허용하는 /api 경로.
+        - 인증/헬스 API
+        - 민간인 공개 신청 흐름(/api/applications/*): 신청·공유토큰·관리토큰 접근
+        - 추천의원 드롭다운용 의원 목록 조회(GET만; 편집은 보호)
+        """
+        if path in _PUBLIC_PATHS:
+            return True
+        if path.startswith("/api/applications/"):
+            return True
+        if path == "/api/legislators" and method == "GET":
+            return True
+        return False
+
     @app.middleware("http")
     async def _session_gate(request: Request, call_next):
         """외부 노출 차단 — 세션 쿠키 인증. 자격은 auth 모듈(DB 우선·env 폴백).
         - 게이트 비활성(비밀번호 미설정) 시 통과
-        - 헬스체크·인증 API·CORS 프리플라이트(OPTIONS) 통과
-        - 프론트 정적 셸(비-/api 경로)은 공개 → SPA 가 로그인 화면을 렌더
+        - 공개 API(_is_public_api)·CORS 프리플라이트(OPTIONS) 통과
+        - 프론트 정적 셸(비-/api 경로)은 공개 → SPA 가 로그인/공개 페이지를 렌더
         - 그 외 모든 /api/* 데이터 요청은 유효한 세션 쿠키 필요
         """
         if not auth.is_enabled():
             return await call_next(request)
         path = request.url.path
-        if request.method == "OPTIONS" or path in _PUBLIC_PATHS:
+        if request.method == "OPTIONS" or _is_public_api(path, request.method):
             return await call_next(request)
         if not path.startswith("/api/"):
             return await call_next(request)  # 정적 셸/SPA 라우팅
