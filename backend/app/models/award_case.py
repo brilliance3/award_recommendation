@@ -44,10 +44,11 @@ class AwardCase(Base):
     share_token = Column(String(36), unique=True, index=True)
     share_enabled = Column(Boolean, default=True, nullable=False)
     share_expires_at = Column(DateTime)
-    # 공유 링크 자격(선택) — 설정 시 대상자 추가 링크 접근에 아이디/비밀번호 요구.
-    # 대표가 관리 화면에서 설정·변경, 담당자(관리자)도 조회·재설정 가능. 평문 저장.
-    share_username = Column(String(100))
-    share_password = Column(String(255))
+    # 관리 링크(/apply/manage) 보호 자격(선택) — 대표가 신청서 제출 시 설정.
+    # 설정 시 관리 링크 접근에 아이디/비밀번호 요구. 담당자(관리자)도 조회·재설정 가능. 평문 저장.
+    # (DB 컬럼명은 기존 share_* 재사용 — 마이그레이션 불필요)
+    manage_username = Column("share_username", String(100))
+    manage_password = Column("share_password", String(255))
     # 기관 대표 전용 검토·최종제출 관리 토큰(대상자 추가 토큰과 별개, 대표만 보유).
     manage_token = Column(String(36), unique=True, index=True)
     # 신청자(대표) 최종 제출 여부. False면 담당자 목록(표창 관리)에서 숨김.

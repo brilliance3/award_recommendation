@@ -49,6 +49,9 @@ export interface ApplicationSubmit {
   applicant_delivery_address?: string;
   recommender_name: string;
   award_date?: string;
+  // 기관 대표가 설정하는 관리 링크 보호 자격(선택)
+  manage_username?: string;
+  manage_password?: string;
   recipients: ApplicationRecipient[];
 }
 
@@ -65,15 +68,13 @@ export const submitApplication = (payload: ApplicationSubmit) =>
     .post<ApplicationSubmitResponse>("/api/applications/submit", payload)
     .then(r => r.data);
 
-// 기관 대표 신청 공유 링크 — 외부 피추천자가 토큰으로 보는 신청 요약(PII 최소)
+// 작성자 자가추가 공유 링크 — 외부 피추천자가 토큰으로 보는 신청 요약(PII 최소). 자격 없이 개방.
 export interface ShareCaseInfo {
   organization?: string;
   recommender_name?: string;
   award_grade?: string;
   award_date?: string;
   recipient_count: number;
-  protected: boolean; // 아이디/비밀번호 보호 여부
-  authorized: boolean; // 보호 시 자격 일치로 열람 가능 여부
 }
 
 export interface ShareRecipientAddResponse {
@@ -82,36 +83,29 @@ export interface ShareRecipientAddResponse {
   message: string;
 }
 
-/** 공유 링크 자격 헤더 — 보호된 링크 접근 시 아이디/비밀번호 전달 */
-export interface ShareCreds {
-  id: string;
-  pw: string;
-}
-
-const shareHeaders = (creds?: ShareCreds) =>
-  creds ? { "X-Share-Id": creds.id, "X-Share-Pw": creds.pw } : undefined;
-
-export const getShareCaseInfo = (token: string, creds?: ShareCreds) =>
+export const getShareCaseInfo = (token: string) =>
   api
-    .get<ShareCaseInfo>(`/api/applications/by-token/${token}`, {
-      headers: shareHeaders(creds),
-    })
+    .get<ShareCaseInfo>(`/api/applications/by-token/${token}`)
     .then(r => r.data);
 
-export const addRecipientByToken = (
-  token: string,
-  payload: ApplicationRecipient,
-  creds?: ShareCreds
-) =>
+export const addRecipientByToken = (token: string, payload: ApplicationRecipient) =>
   api
     .post<ShareRecipientAddResponse>(
       `/api/applications/by-token/${token}/recipients`,
-      payload,
-      { headers: shareHeaders(creds) }
+      payload
     )
     .then(r => r.data);
 
 // 기관 대표 전용 검토·최종제출 관리
+/** 관리 링크 자격 헤더 — 보호된 관리 링크 접근 시 아이디/비밀번호 전달 */
+export interface ManageCreds {
+  id: string;
+  pw: string;
+}
+
+const manageHeaders = (creds?: ManageCreds) =>
+  creds ? { "X-Manage-Id": creds.id, "X-Manage-Pw": creds.pw } : undefined;
+
 export interface ManageRecipientItem {
   id: string;
   recipient_name?: string;
@@ -157,10 +151,15 @@ export interface ManageRecipientDetail extends ManageRecipientBasic {
   merit_content?: ManageRecipientMerit | null;
 }
 
-export const getManageRecipient = (manageToken: string, recipientId: string) =>
+export const getManageRecipient = (
+  manageToken: string,
+  recipientId: string,
+  creds?: ManageCreds
+) =>
   api
     .get<ManageRecipientDetail>(
-      `/api/applications/manage/${manageToken}/recipients/${recipientId}`
+      `/api/applications/manage/${manageToken}/recipients/${recipientId}`,
+      { headers: manageHeaders(creds) }
     )
     .then(r => r.data);
 
@@ -168,18 +167,26 @@ export const updateManageRecipient = (
   manageToken: string,
   recipientId: string,
   basic: ManageRecipientBasic,
-  merit: ManageRecipientMerit
+  merit: ManageRecipientMerit,
+  creds?: ManageCreds
 ) =>
   api
     .put<ManageRecipientDetail>(
       `/api/applications/manage/${manageToken}/recipients/${recipientId}`,
-      { basic, merit }
+      { basic, merit },
+      { headers: manageHeaders(creds) }
     )
     .then(r => r.data);
 
-export const deleteManageRecipient = (manageToken: string, recipientId: string) =>
+export const deleteManageRecipient = (
+  manageToken: string,
+  recipientId: string,
+  creds?: ManageCreds
+) =>
   api
-    .delete(`/api/applications/manage/${manageToken}/recipients/${recipientId}`)
+    .delete(`/api/applications/manage/${manageToken}/recipients/${recipientId}`, {
+      headers: manageHeaders(creds),
+    })
     .then(r => r.data);
 
 export interface ManageCaseInfo {
@@ -191,8 +198,9 @@ export interface ManageCaseInfo {
   submitted: boolean;
   recipient_count: number;
   recipients: ManageRecipientItem[];
-  share_protected: boolean;
-  share_username: string;
+  protected: boolean; // 관리 링크 보호 여부
+  authorized: boolean; // 보호 시 자격 일치로 열람 가능 여부
+  manage_username: string;
 }
 
 export interface ManageSubmitResponse {
@@ -201,52 +209,58 @@ export interface ManageSubmitResponse {
   message: string;
 }
 
-export const getManageInfo = (manageToken: string) =>
+export const getManageInfo = (manageToken: string, creds?: ManageCreds) =>
   api
-    .get<ManageCaseInfo>(`/api/applications/manage/${manageToken}`)
+    .get<ManageCaseInfo>(`/api/applications/manage/${manageToken}`, {
+      headers: manageHeaders(creds),
+    })
     .then(r => r.data);
 
-export const submitManageApplication = (manageToken: string) =>
+export const submitManageApplication = (manageToken: string, creds?: ManageCreds) =>
   api
     .post<ManageSubmitResponse>(
-      `/api/applications/manage/${manageToken}/submit`
+      `/api/applications/manage/${manageToken}/submit`,
+      undefined,
+      { headers: manageHeaders(creds) }
     )
     .then(r => r.data);
 
-// 공유 링크 자격(아이디/비밀번호) — password 빈값이면 해제(공개)
-export interface ShareCredentials {
+// 관리 링크 자격(아이디/비밀번호) — password 빈값이면 해제(공개)
+export interface ManageCredentials {
   protected: boolean;
   username: string;
   password: string;
 }
 
-/** 기관 대표(관리 토큰)가 공유 링크 자격 설정/변경/해제 */
-export const setShareCredentialsByManage = (
+/** 기관 대표(관리 토큰, 인증된 상태)가 관리 비밀번호 변경/해제 */
+export const changeManageCredentials = (
   manageToken: string,
   username: string,
-  password: string
+  password: string,
+  creds?: ManageCreds
 ) =>
   api
-    .put<ShareCredentials>(
-      `/api/applications/manage/${manageToken}/share-credentials`,
-      { username, password }
+    .put<ManageCredentials>(
+      `/api/applications/manage/${manageToken}/credentials`,
+      { username, password },
+      { headers: manageHeaders(creds) }
     )
     .then(r => r.data);
 
-/** 담당자(관리자)가 case_id로 공유 링크 자격 조회(평문) */
-export const getShareCredentials = (caseId: string) =>
+/** 담당자(관리자)가 case_id로 관리 링크 자격 조회(평문) */
+export const getManageCredentials = (caseId: string) =>
   api
-    .get<ShareCredentials>(`/api/award-cases/${caseId}/share-credentials`)
+    .get<ManageCredentials>(`/api/award-cases/${caseId}/manage-credentials`)
     .then(r => r.data);
 
-/** 담당자(관리자)가 case_id로 공유 링크 자격 재설정/해제 */
-export const setShareCredentials = (
+/** 담당자(관리자)가 case_id로 관리 링크 자격 재설정/해제 */
+export const setManageCredentials = (
   caseId: string,
   username: string,
   password: string
 ) =>
   api
-    .put<ShareCredentials>(`/api/award-cases/${caseId}/share-credentials`, {
+    .put<ManageCredentials>(`/api/award-cases/${caseId}/manage-credentials`, {
       username,
       password,
     })

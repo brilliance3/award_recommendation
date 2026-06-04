@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { cancelAdminReview, deleteRecipient, getCase, importXlsx, updateCase, updateRecipient, getShareCredentials, setShareCredentials, type ShareCredentials } from "../api";
+import { cancelAdminReview, deleteRecipient, getCase, importXlsx, updateCase, updateRecipient, getManageCredentials, setManageCredentials, type ManageCredentials } from "../api";
 import { absoluteUrl } from "../api/client";
 import type { AwardCaseDetail } from "../types";
 import { Button, Input } from "../components/Field";
@@ -40,16 +40,16 @@ export default function RecipientListPage() {
   // 공유 링크 회수/재개
   const [savingShare, setSavingShare] = useState(false);
 
-  // 공유 링크 자격(아이디/비밀번호) — 담당자 조회·재설정
-  const [shareCred, setShareCred] = useState<ShareCredentials | null>(null);
+  // 관리 링크 자격(아이디/비밀번호) — 담당자 조회·재설정 (대표가 잊으면 안내)
+  const [manageCred, setManageCred] = useState<ManageCredentials | null>(null);
   const [credUser, setCredUser] = useState("");
   const [credPw, setCredPw] = useState("");
   const [savingCred, setSavingCred] = useState(false);
 
-  const loadShareCred = async () => {
+  const loadManageCred = async () => {
     try {
-      const c = await getShareCredentials(caseId);
-      setShareCred(c);
+      const c = await getManageCredentials(caseId);
+      setManageCred(c);
       setCredUser(c.username);
       setCredPw(c.password);
     } catch (err: any) {
@@ -64,9 +64,9 @@ export default function RecipientListPage() {
     }
     setSavingCred(true);
     try {
-      const c = await setShareCredentials(caseId, credUser.trim(), credPw);
-      setShareCred(c);
-      alert("공유 링크 자격을 재설정했습니다. 작성자에게 새 아이디·비밀번호를 알려주세요.");
+      const c = await setManageCredentials(caseId, credUser.trim(), credPw);
+      setManageCred(c);
+      alert("관리 링크 자격을 재설정했습니다. 대표자에게 새 아이디·비밀번호를 알려주세요.");
     } catch (err: any) {
       alert("재설정 실패: " + (err?.response?.data?.detail || err?.message || ""));
     } finally {
@@ -75,12 +75,12 @@ export default function RecipientListPage() {
   };
 
   const onClearCred = async () => {
-    if (!confirm("자격을 해제하면 누구나 링크로 대상자를 추가할 수 있습니다. 진행할까요?"))
+    if (!confirm("자격을 해제하면 링크 주소만 알면 누구나 관리 화면에 접근할 수 있습니다. 진행할까요?"))
       return;
     setSavingCred(true);
     try {
-      const c = await setShareCredentials(caseId, "", "");
-      setShareCred(c);
+      const c = await setManageCredentials(caseId, "", "");
+      setManageCred(c);
       setCredPw("");
       alert("자격을 해제했습니다.");
     } catch (err: any) {
@@ -529,33 +529,33 @@ export default function RecipientListPage() {
             </div>
           )}
 
-          {/* 공유 링크 자격(아이디/비밀번호) — 담당자 조회·재설정 */}
+          {/* 관리 링크 자격(아이디/비밀번호) — 담당자 조회·재설정 */}
           <div className="mt-4 pt-4 border-t border-blue-200/70">
-            {!shareCred ? (
+            {!manageCred ? (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={loadShareCred}
+                onClick={loadManageCred}
               >
-                공유 링크 자격(아이디/비밀번호) 보기·관리
+                관리 링크 비밀번호(아이디/비밀번호) 보기·관리
               </Button>
             ) : (
               <>
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <h3 className="text-sm font-bold text-ink-800">
-                    공유 링크 자격
+                    관리 링크 비밀번호
                   </h3>
                   <span
                     className={`text-xs font-semibold ${
-                      shareCred.protected ? "text-success-700" : "text-ink-500"
+                      manageCred.protected ? "text-success-700" : "text-ink-500"
                     }`}
                   >
-                    {shareCred.protected ? "설정됨" : "미설정(공개)"}
+                    {manageCred.protected ? "설정됨" : "미설정(링크만으로 접근)"}
                   </span>
                 </div>
                 <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">
-                  작성자가 잊었을 때 아래 값을 알려주거나, 새로 재설정해 전달하세요.
+                  기관 대표자가 잊었을 때 아래 값을 알려주거나, 새로 재설정해 전달하세요.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                   <label className="block">
@@ -578,9 +578,9 @@ export default function RecipientListPage() {
                 </div>
                 <div className="flex gap-2 mt-3">
                   <Button type="button" size="sm" onClick={onSaveCred} disabled={savingCred}>
-                    {shareCred.protected ? "자격 재설정" : "자격 설정"}
+                    {manageCred.protected ? "자격 재설정" : "자격 설정"}
                   </Button>
-                  {shareCred.protected && (
+                  {manageCred.protected && (
                     <Button
                       type="button"
                       size="sm"

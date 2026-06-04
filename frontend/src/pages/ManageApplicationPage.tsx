@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   getManageInfo,
   submitManageApplication,
-  setShareCredentialsByManage,
+  changeManageCredentials,
   getManageRecipient,
   updateManageRecipient,
   deleteManageRecipient,
   type ManageCaseInfo,
+  type ManageCreds,
   type ManageRecipientBasic,
   type ManageRecipientMerit,
 } from "../api/applications";
@@ -15,41 +16,36 @@ import Field, { Button, Input, TextArea } from "../components/Field";
 import PublicLayout from "../components/PublicLayout";
 import ShareLinkBox from "../components/ShareLinkBox";
 
-/** 기관 대표 전용(/apply/manage/:token) — 모인 대상자 검토 + 대상자 추가 링크 배포 + 최종 제출. */
+/** 기관 대표 전용(/apply/manage/:token) — 보호되는 관리 링크.
+ *  대표가 모인 대상자를 검토·수정·제외하고 최종 제출한다. 관리 비밀번호가 설정돼 있으면
+ *  아이디/비밀번호로 인증해야 접근할 수 있다(작성 대상자 추가 링크는 별도로 개방). */
 export default function ManageApplicationPage() {
   const { token = "" } = useParams();
   const [info, setInfo] = useState<ManageCaseInfo | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // 공유 링크 자격(아이디/비밀번호) 설정
+  // 관리 링크 자격 — 인증된 자격은 메모리에만 보관
+  const [creds, setCreds] = useState<ManageCreds | null>(null);
+  const [authId, setAuthId] = useState("");
+  const [authPw, setAuthPw] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authChecking, setAuthChecking] = useState(false);
+
+  // 관리 비밀번호 변경/해제
   const [credUser, setCredUser] = useState("");
   const [credPw, setCredPw] = useState("");
   const [savingCred, setSavingCred] = useState(false);
 
-  // 대상자 검토·수정 (대표 = 중간관리자)
+  // 대상자 검토·수정
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const onDeleteRecipient = async (rid: string, name?: string) => {
-    if (!confirm(`'${name || "이 대상자"}'를 명단에서 제외할까요? 되돌릴 수 없습니다.`))
-      return;
-    setDeletingId(rid);
-    try {
-      await deleteManageRecipient(token, rid);
-      await load();
-    } catch (err: any) {
-      alert("제외 실패: " + (err?.response?.data?.detail || err?.message || ""));
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const load = () =>
-    getManageInfo(token)
+  const load = (c?: ManageCreds | null) =>
+    getManageInfo(token, c ?? undefined)
       .then(s => {
         setInfo(s);
-        setCredUser(s.share_username || "");
+        setCredUser(s.manage_username || "");
       })
       .catch(err =>
         setLoadError(
@@ -57,48 +53,45 @@ export default function ManageApplicationPage() {
         )
       );
 
-  const onSaveCred = async () => {
-    if (!credUser.trim()) {
-      alert("아이디를 입력하세요.");
-      return;
-    }
-    if (credPw.length < 4) {
-      alert("비밀번호는 4자 이상이어야 합니다.");
-      return;
-    }
-    setSavingCred(true);
-    try {
-      await setShareCredentialsByManage(token, credUser.trim(), credPw);
-      setCredPw("");
-      await load();
-      alert("공유 링크 자격을 설정했습니다. 이제 이 링크를 열려면 아이디·비밀번호가 필요합니다.");
-    } catch (err: any) {
-      alert("설정 실패: " + (err?.response?.data?.detail || err?.message || ""));
-    } finally {
-      setSavingCred(false);
-    }
-  };
-
-  const onClearCred = async () => {
-    if (!confirm("공유 링크 자격을 해제하면 누구나 링크로 대상자를 추가할 수 있습니다. 진행할까요?"))
-      return;
-    setSavingCred(true);
-    try {
-      await setShareCredentialsByManage(token, "", "");
-      setCredPw("");
-      await load();
-      alert("자격을 해제했습니다. 이제 링크만으로 접근할 수 있습니다.");
-    } catch (err: any) {
-      alert("해제 실패: " + (err?.response?.data?.detail || err?.message || ""));
-    } finally {
-      setSavingCred(false);
-    }
-  };
-
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  const onAuthSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthChecking(true);
+    try {
+      const c: ManageCreds = { id: authId.trim(), pw: authPw };
+      const s = await getManageInfo(token, c);
+      if (s.authorized) {
+        setCreds(c);
+        setInfo(s);
+        setCredUser(s.manage_username || "");
+      } else {
+        setAuthError("아이디 또는 비밀번호가 올바르지 않습니다.");
+      }
+    } catch {
+      setAuthError("확인 중 오류가 발생했습니다. 다시 시도해 주세요.");
+    } finally {
+      setAuthChecking(false);
+    }
+  };
+
+  const onDeleteRecipient = async (rid: string, name?: string) => {
+    if (!confirm(`'${name || "이 대상자"}'를 명단에서 제외할까요? 되돌릴 수 없습니다.`))
+      return;
+    setDeletingId(rid);
+    try {
+      await deleteManageRecipient(token, rid, creds ?? undefined);
+      await load(creds);
+    } catch (err: any) {
+      alert("제외 실패: " + (err?.response?.data?.detail || err?.message || ""));
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const onFinalSubmit = async () => {
     if (
@@ -109,16 +102,65 @@ export default function ManageApplicationPage() {
       return;
     setSubmitting(true);
     try {
-      await submitManageApplication(token);
-      await load();
+      await submitManageApplication(token, creds ?? undefined);
+      await load(creds);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: any) {
       alert(
-        "최종 제출 실패: " +
-          (err?.response?.data?.detail || err?.message || "")
+        "최종 제출 실패: " + (err?.response?.data?.detail || err?.message || "")
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const onChangeCred = async () => {
+    if (!credUser.trim()) {
+      alert("아이디를 입력하세요.");
+      return;
+    }
+    if (credPw.length < 4) {
+      alert("비밀번호는 4자 이상이어야 합니다.");
+      return;
+    }
+    setSavingCred(true);
+    try {
+      await changeManageCredentials(
+        token,
+        credUser.trim(),
+        credPw,
+        creds ?? undefined
+      );
+      const next: ManageCreds = { id: credUser.trim(), pw: credPw };
+      setCreds(next); // 새 자격으로 세션 유지
+      setCredPw("");
+      await load(next);
+      alert("관리 비밀번호를 변경했습니다.");
+    } catch (err: any) {
+      alert("변경 실패: " + (err?.response?.data?.detail || err?.message || ""));
+    } finally {
+      setSavingCred(false);
+    }
+  };
+
+  const onClearCred = async () => {
+    if (
+      !confirm(
+        "관리 비밀번호를 해제하면 링크 주소만 알면 누구나 이 관리 화면에 접근할 수 있습니다. 진행할까요?"
+      )
+    )
+      return;
+    setSavingCred(true);
+    try {
+      await changeManageCredentials(token, "", "", creds ?? undefined);
+      setCreds(null);
+      setCredPw("");
+      await load(null);
+      alert("관리 비밀번호를 해제했습니다.");
+    } catch (err: any) {
+      alert("해제 실패: " + (err?.response?.data?.detail || err?.message || ""));
+    } finally {
+      setSavingCred(false);
     }
   };
 
@@ -142,6 +184,52 @@ export default function ManageApplicationPage() {
     return (
       <PublicLayout>
         <div className="max-w-2xl mx-auto text-ink-500">불러오는 중...</div>
+      </PublicLayout>
+    );
+  }
+
+  // 관리 비밀번호 보호 — 아직 인증 안 됨: 아이디/비밀번호 게이트
+  if (info.protected && !info.authorized) {
+    return (
+      <PublicLayout>
+        <div className="max-w-md mx-auto">
+          <div className="krds-page-header">
+            <div>
+              <h1 className="krds-page-title">관리자 인증</h1>
+              <p className="krds-page-sub leading-relaxed">
+                기관 대표 관리 화면입니다. 신청 시 설정한 아이디와 비밀번호를
+                입력해 주세요. 잊으신 경우 표창 담당 전문위원실에 문의하면
+                확인·재설정해 드립니다.
+              </p>
+            </div>
+          </div>
+          <form onSubmit={onAuthSubmit} className="krds-card krds-card-pad space-y-4">
+            <Field label="아이디">
+              <Input
+                value={authId}
+                onChange={e => setAuthId(e.target.value)}
+                autoFocus
+                required
+              />
+            </Field>
+            <Field label="비밀번호">
+              <Input
+                type="password"
+                value={authPw}
+                onChange={e => setAuthPw(e.target.value)}
+                required
+              />
+            </Field>
+            {authError && (
+              <p className="text-sm text-danger-700 bg-danger-50 border border-danger-200 rounded-md px-3 py-2">
+                {authError}
+              </p>
+            )}
+            <Button type="submit" disabled={authChecking} block>
+              {authChecking ? "확인 중..." : "확인"}
+            </Button>
+          </form>
+        </div>
       </PublicLayout>
     );
   }
@@ -180,78 +268,79 @@ export default function ManageApplicationPage() {
           </div>
         )}
 
-        {/* 대상자 추가 링크 — 대표가 각 대상자에게 배포 */}
+        {/* 대상자 추가 링크 — 대표가 각 대상자에게 배포(자격 없이 개방) */}
         {info.share_token && (
           <div className="krds-card krds-card-pad">
             <h2 className="text-sm font-bold text-ink-800">
               대상자 추가 링크 (각 추천대상자에게 전달)
             </h2>
-            <p className="text-xs text-ink-600 mt-0.5">
+            <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">
               이 링크를 받은 대상자가 본인 정보를 입력하면 아래 명단에 추가됩니다.
+              <strong> 작성자는 아이디·비밀번호 없이</strong> 바로 입력할 수
+              있습니다.
             </p>
             <ShareLinkBox token={info.share_token} basePath="/apply/add" />
-
-            {/* 공유 링크 자격(아이디/비밀번호) 설정 — 선택 */}
-            <div className="mt-4 pt-4 border-t border-ink-100">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <h3 className="text-sm font-bold text-ink-800">
-                  링크 보호 (아이디/비밀번호)
-                </h3>
-                <span
-                  className={`text-xs font-semibold ${
-                    info.share_protected ? "text-success-700" : "text-ink-500"
-                  }`}
-                >
-                  {info.share_protected ? "설정됨" : "미설정(공개)"}
-                </span>
-              </div>
-              <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">
-                설정하면 위 링크를 받은 사람도 아이디·비밀번호를 입력해야 정보를
-                추가할 수 있습니다. 작성자가 자격을 잊으면 표창 담당 전문위원실에
-                문의하면 확인·재설정해 드립니다.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                <Field label="아이디">
-                  <Input
-                    value={credUser}
-                    onChange={e => setCredUser(e.target.value)}
-                    autoComplete="off"
-                  />
-                </Field>
-                <Field label="비밀번호" hint="4자 이상. 변경 시 새로 입력">
-                  <Input
-                    type="password"
-                    value={credPw}
-                    onChange={e => setCredPw(e.target.value)}
-                    autoComplete="new-password"
-                    placeholder={info.share_protected ? "변경하려면 입력" : "설정할 비밀번호"}
-                  />
-                </Field>
-              </div>
-              <div className="flex gap-2 mt-3">
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={onSaveCred}
-                  disabled={savingCred}
-                >
-                  {info.share_protected ? "자격 변경" : "자격 설정"}
-                </Button>
-                {info.share_protected && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={onClearCred}
-                    disabled={savingCred}
-                  >
-                    자격 해제
-                  </Button>
-                )}
-              </div>
-            </div>
           </div>
         )}
+
+        {/* 관리 링크 비밀번호 — 이 관리 화면 보호 (변경/해제) */}
+        <div className="krds-card krds-card-pad">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h2 className="text-sm font-bold text-ink-800">
+              관리 화면 비밀번호
+            </h2>
+            <span
+              className={`text-xs font-semibold ${
+                info.protected ? "text-success-700" : "text-ink-500"
+              }`}
+            >
+              {info.protected ? "보호 중" : "미설정(링크만으로 접근)"}
+            </span>
+          </div>
+          <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">
+            이 관리 화면(검토·수정·최종제출)에 접근할 때 요구하는 아이디·비밀번호입니다.
+            변경하면 다음 접속부터 새 자격이 필요합니다.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+            <Field label="아이디">
+              <Input
+                value={credUser}
+                onChange={e => setCredUser(e.target.value)}
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="비밀번호" hint="4자 이상. 변경 시 새로 입력">
+              <Input
+                type="password"
+                value={credPw}
+                onChange={e => setCredPw(e.target.value)}
+                autoComplete="new-password"
+                placeholder={info.protected ? "변경하려면 입력" : "설정할 비밀번호"}
+              />
+            </Field>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <Button
+              type="button"
+              size="sm"
+              onClick={onChangeCred}
+              disabled={savingCred}
+            >
+              {info.protected ? "비밀번호 변경" : "비밀번호 설정"}
+            </Button>
+            {info.protected && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={onClearCred}
+                disabled={savingCred}
+              >
+                보호 해제
+              </Button>
+            )}
+          </div>
+        </div>
 
         {/* 모인 대상자 명단 */}
         <div className="krds-card krds-card-pad">
@@ -318,10 +407,11 @@ export default function ManageApplicationPage() {
           <RecipientEditModal
             manageToken={token}
             recipientId={editingId}
+            creds={creds}
             onClose={() => setEditingId(null)}
             onSaved={async () => {
               setEditingId(null);
-              await load();
+              await load(creds);
             }}
           />
         )}
@@ -346,11 +436,13 @@ export default function ManageApplicationPage() {
 function RecipientEditModal({
   manageToken,
   recipientId,
+  creds,
   onClose,
   onSaved,
 }: {
   manageToken: string;
   recipientId: string;
+  creds: ManageCreds | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -360,7 +452,7 @@ function RecipientEditModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getManageRecipient(manageToken, recipientId)
+    getManageRecipient(manageToken, recipientId, creds ?? undefined)
       .then(d => {
         setBasic({
           recipient_name: d.recipient_name,
@@ -383,7 +475,7 @@ function RecipientEditModal({
       .catch(err =>
         setError(err?.response?.data?.detail || "대상자 정보를 불러오지 못했습니다.")
       );
-  }, [manageToken, recipientId]);
+  }, [manageToken, recipientId, creds]);
 
   const setB = (k: keyof ManageRecipientBasic) => (v: string) =>
     setBasic(prev => (prev ? { ...prev, [k]: v } : prev));
@@ -399,7 +491,13 @@ function RecipientEditModal({
     setSaving(true);
     setError(null);
     try {
-      await updateManageRecipient(manageToken, recipientId, basic, merit);
+      await updateManageRecipient(
+        manageToken,
+        recipientId,
+        basic,
+        merit,
+        creds ?? undefined
+      );
       onSaved();
     } catch (err: any) {
       setError(err?.response?.data?.detail || err?.message || "저장에 실패했습니다.");

@@ -68,6 +68,11 @@ class ApplicationSubmit(BaseModel):
     # 훈격은 경기도의회 의장 표창 단일(도지사 표창은 별도 기능 제거됨).
     award_date: Optional[date] = None  # 희망 표창일 (선택)
 
+    # 기관 대표 신청 시 관리 링크(/apply/manage) 보호 자격(선택). 설정하면 관리 링크에
+    # 아이디/비밀번호 요구. 비우면 관리 링크는 토큰만으로 접근.
+    manage_username: Optional[str] = ""
+    manage_password: Optional[str] = ""
+
     # 대상자 — 개인 신청은 본인 1명 이상, 기관 대표 신청은 0명 허용(공유 URL로 자가추가).
     # 역할별 최소개수는 핸들러(submit_application)에서 검증한다.
     recipients: List[ApplicationRecipient] = Field(default_factory=list)
@@ -90,20 +95,18 @@ class ShareCaseInfo(BaseModel):
     award_grade: Optional[str] = None  # 훈격
     award_date: Optional[date] = None  # 희망 표창일
     recipient_count: int = 0  # 현재까지 추가된 대상자 수
-    protected: bool = False  # 자격(아이디/비밀번호) 보호 여부
-    authorized: bool = True  # 보호 시 자격이 일치해 정보 열람 가능 여부
 
 
-class ShareCredentialsUpdate(BaseModel):
-    """공유 링크 자격 설정/변경 — password 가 비면 자격 해제(공개)."""
+class ManageCredentialsUpdate(BaseModel):
+    """관리 링크 자격 설정/변경 — password 가 비면 자격 해제(공개)."""
     username: str = ""
     password: str = ""
 
 
-class ShareCredentialsRead(BaseModel):
+class ManageCredentialsRead(BaseModel):
     protected: bool = False
     username: str = ""
-    password: str = ""  # 관리자/대표가 작성자에게 알려줄 수 있게 평문 반환
+    password: str = ""  # 관리자/대표가 확인·전달할 수 있게 평문 반환
 
 
 class ShareRecipientAddResponse(BaseModel):
@@ -131,8 +134,9 @@ class ManageCaseInfo(BaseModel):
     submitted: bool = False  # 최종 제출 여부(False면 담당자에게 아직 안 보임)
     recipient_count: int = 0
     recipients: List[ManageRecipientItem] = []
-    share_protected: bool = False  # 공유 링크 자격 설정 여부
-    share_username: str = ""  # 설정된 아이디(대표가 확인·전달용)
+    protected: bool = False  # 관리 링크 자격 보호 여부
+    authorized: bool = True  # 보호 시 자격 일치로 열람 가능 여부
+    manage_username: str = ""  # 설정된 관리 아이디(대표 확인용)
 
 
 class ManageRecipientUpdate(BaseModel):

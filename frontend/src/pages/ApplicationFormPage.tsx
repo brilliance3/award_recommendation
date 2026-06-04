@@ -207,6 +207,9 @@ export default function ApplicationFormPage() {
   const [applicantOrg, setApplicantOrg] = useState("");
   const [applicantContact, setApplicantContact] = useState("");
   const [applicantDeliveryAddress, setApplicantDeliveryAddress] = useState("");
+  // 기관 대표 신청 시 관리 링크 보호 자격(선택)
+  const [manageUser, setManageUser] = useState("");
+  const [managePw, setManagePw] = useState("");
   const [recommenderName, setRecommenderName] = useState("");
   const [awardDate, setAwardDate] = useState("");
   const [recipients, setRecipients] = useState<RecipientFormData[]>([]);
@@ -445,6 +448,10 @@ export default function ApplicationFormPage() {
       return;
     }
 
+    if (applicantRole === "organization" && managePw && managePw.length < 4) {
+      setSubmitError("관리 비밀번호는 4자 이상이어야 합니다.");
+      return;
+    }
     const payload: ApplicationSubmit = {
       applicant_role: applicantRole,
       applicant_name: applicantName.trim(),
@@ -453,6 +460,9 @@ export default function ApplicationFormPage() {
       applicant_delivery_address: applicantDeliveryAddress.trim() || undefined,
       recommender_name: recommenderName.trim(),
       award_date: awardDate || undefined,
+      manage_username:
+        applicantRole === "organization" ? manageUser.trim() : undefined,
+      manage_password: applicantRole === "organization" ? managePw : undefined,
       recipients: recipients.map(toApplicationRecipient),
     };
 
@@ -650,6 +660,38 @@ export default function ApplicationFormPage() {
               placeholder="예: 경기도 수원시 영통구 도청로 32"
             />
           </Field>
+
+          {applicantRole === "organization" && (
+            <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-3 sm:p-4">
+              <h3 className="text-sm font-bold text-ink-800">
+                관리 화면 보호 비밀번호 <span className="text-ink-500 font-normal">(선택)</span>
+              </h3>
+              <p className="text-xs text-ink-600 mt-1 leading-relaxed">
+                제출 후 받는 <strong>관리 링크</strong>(대상자 검토·수정·최종제출)를
+                보호할 아이디·비밀번호입니다. 설정하면 관리 링크를 열 때 입력해야 합니다.
+                대상자 추가 링크는 비밀번호 없이 개방됩니다. (비워두면 보호 안 함)
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                <Field label="관리 아이디" hint="비우면 'manage'로 설정">
+                  <Input
+                    value={manageUser}
+                    onChange={e => setManageUser(e.target.value)}
+                    autoComplete="off"
+                    placeholder="예: 봉사회"
+                  />
+                </Field>
+                <Field label="관리 비밀번호" hint="4자 이상">
+                  <Input
+                    type="password"
+                    value={managePw}
+                    onChange={e => setManagePw(e.target.value)}
+                    autoComplete="new-password"
+                    placeholder="설정할 비밀번호"
+                  />
+                </Field>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* 추천의원 정보 */}

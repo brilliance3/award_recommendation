@@ -17,15 +17,15 @@ from .deps import get_case_by_share_token_or_404, get_case_by_manage_token_or_40
 router = APIRouter(tags=["applications"])
 
 
-def _share_authorized(case: models.AwardCase, request: Request) -> bool:
-    """공유 링크 자격 검사. 자격 미설정이면 항상 통과.
-    설정 시 요청 헤더 X-Share-Id / X-Share-Pw 가 일치해야 함(상수시간 비교)."""
-    if not case.share_password:
+def _manage_authorized(case: models.AwardCase, request: Request) -> bool:
+    """관리 링크 자격 검사. 자격 미설정이면 항상 통과.
+    설정 시 요청 헤더 X-Manage-Id / X-Manage-Pw 가 일치해야 함(상수시간 비교)."""
+    if not case.manage_password:
         return True
-    uid = request.headers.get("x-share-id", "")
-    pw = request.headers.get("x-share-pw", "")
-    ok_u = secrets.compare_digest(uid.encode("utf-8"), (case.share_username or "").encode("utf-8"))
-    ok_p = secrets.compare_digest(pw.encode("utf-8"), case.share_password.encode("utf-8"))
+    uid = request.headers.get("x-manage-id", "")
+    pw = request.headers.get("x-manage-pw", "")
+    ok_u = secrets.compare_digest(uid.encode("utf-8"), (case.manage_username or "").encode("utf-8"))
+    ok_p = secrets.compare_digest(pw.encode("utf-8"), case.manage_password.encode("utf-8"))
     return ok_u and ok_p
 
 # 공유 링크 유효기간(일) — 만료되면 자가추가 차단(담당자가 회수/갱신 가능)
@@ -229,6 +229,13 @@ def submit_application(
         ),
         applicant_submitted=(payload.applicant_role != "organization"),
     )
+    # 기관 대표가 제출 시 관리 링크 보호 자격을 설정했으면 저장(선택).
+    if payload.applicant_role == "organization" and (payload.manage_password or "").strip():
+        pw = payload.manage_password.strip()
+        if len(pw) < 4:
+            raise HTTPException(status_code=400, detail="관리 비밀번호는 4자 이상이어야 합니다")
+        case.manage_username = (payload.manage_username or "").strip() or "manage"
+        case.manage_password = pw
     db.add(case)
     db.flush()
 
@@ -258,22 +265,16 @@ SHARE_MAX_RECIPIENTS = 100
     "/api/applications/by-token/{token}",
     response_model=schemas.ShareCaseInfo,
 )
-def get_share_case_info(token: str, request: Request, db: Session = Depends(get_db)):
-    """공유 토큰으로 보는 신청 요약(공개). PII 최소 — 대상자 명단·생년월일·주소 미노출.
-    자격이 설정된 링크는 헤더 자격이 맞아야 정보를 반환(틀리면 protected/authorized만)."""
+def get_share_case_info(token: str, db: Session = Depends(get_db)):
+    """공유 토큰으로 보는 신청 요약(공개·개방). PII 최소 — 대상자 명단·생년월일·주소 미노출.
+    작성 대상자(자가추가)는 자격 없이 접근한다."""
     case = get_case_by_share_token_or_404(db, token)
-    protected = bool(case.share_password)
-    authorized = _share_authorized(case, request)
-    if protected and not authorized:
-        return schemas.ShareCaseInfo(protected=True, authorized=False)
     return schemas.ShareCaseInfo(
         organization=case.applicant_organization,
         recommender_name=case.recommender_name,
         award_grade=case.award_grade,
         award_date=case.award_date,
         recipient_count=len(case.recipients),
-        protected=protected,
-        authorized=True,
     )
 
 
@@ -292,10 +293,6 @@ def add_recipient_by_token(
     강한 본인확인: 체크리스트 본인확인 성명·생년월일이 입력한 기본정보와 일치해야 한다.
     중복(성명+생년월일) 차단, case별 인원 상한, 제목 자동 갱신."""
     case = get_case_by_share_token_or_404(db, token)
-
-    # 공유 링크 자격(설정 시) — 헤더 자격 불일치면 차단
-    if not _share_authorized(case, request):
-        raise HTTPException(status_code=401, detail="공유 링크 자격(아이디/비밀번호)이 필요합니다.")
 
     # 강한 본인확인 — 체크리스트 self_confirm 이 기본정보(성명·생년월일)와 일치해야 함
     if (payload.checklist.self_confirm_name or "").strip() != (payload.recipient_name or "").strip():
@@ -349,9 +346,13 @@ def add_recipient_by_token(
     "/api/applications/manage/{manage_token}",
     response_model=schemas.ManageCaseInfo,
 )
-def get_manage_info(manage_token: str, db: Session = Depends(get_db)):
-    """기관 대표 전용 — 모인 대상자 검토 화면 데이터. 대표만 보유한 관리 토큰으로 접근."""
+def get_manage_info(manage_token: str, request: Request, db: Session = Depends(get_db)):
+    """기관 대표 전용 — 모인 대상자 검토 화면 데이터. 대표만 보유한 관리 토큰으로 접근.
+    관리 비밀번호가 설정된 경우 헤더 자격(X-Manage-Id/Pw)이 맞아야 데이터를 반환."""
     case = get_case_by_manage_token_or_404(db, manage_token)
+    protected = bool(case.manage_password)
+    if protected and not _manage_authorized(case, request):
+        return schemas.ManageCaseInfo(protected=True, authorized=False)
     return schemas.ManageCaseInfo(
         organization=case.applicant_organization,
         recommender_name=case.recommender_name,
@@ -370,57 +371,63 @@ def get_manage_info(manage_token: str, db: Session = Depends(get_db)):
             )
             for r in case.recipients
         ],
-        share_protected=bool(case.share_password),
-        share_username=case.share_username or "",
+        protected=protected,
+        authorized=True,
+        manage_username=case.manage_username or "",
     )
 
 
 @router.put(
-    "/api/applications/manage/{manage_token}/share-credentials",
-    response_model=schemas.ShareCredentialsRead,
+    "/api/applications/manage/{manage_token}/credentials",
+    response_model=schemas.ManageCredentialsRead,
 )
-def set_share_credentials_by_manage(
+def change_manage_credentials(
     manage_token: str,
-    payload: schemas.ShareCredentialsUpdate,
+    payload: schemas.ManageCredentialsUpdate,
+    request: Request,
     db: Session = Depends(get_db),
 ):
-    """기관 대표가 관리 화면에서 공유 링크 자격을 설정/변경/해제.
-    password 가 비면 자격 해제(공개). 설정 시 아이디·비밀번호 모두 필요."""
+    """대표가 (관리 링크에 인증된 상태에서) 관리 비밀번호를 변경/해제.
+    password 가 비면 해제(공개). 현재 보호 중이면 헤더 자격이 맞아야 변경 가능."""
     case = get_case_by_manage_token_or_404(db, manage_token)
-    _apply_share_credentials(case, payload)
+    if case.manage_password and not _manage_authorized(case, request):
+        raise HTTPException(status_code=401, detail="관리 자격이 필요합니다.")
+    _apply_manage_credentials(case, payload)
     db.commit()
     db.refresh(case)
-    return schemas.ShareCredentialsRead(
-        protected=bool(case.share_password),
-        username=case.share_username or "",
-        password=case.share_password or "",
+    return schemas.ManageCredentialsRead(
+        protected=bool(case.manage_password),
+        username=case.manage_username or "",
+        password=case.manage_password or "",
     )
 
 
-def _apply_share_credentials(
-    case: models.AwardCase, payload: schemas.ShareCredentialsUpdate
+def _apply_manage_credentials(
+    case: models.AwardCase, payload: schemas.ManageCredentialsUpdate
 ) -> None:
-    """공유 자격 적용 — 비밀번호 비면 해제, 있으면 아이디(기본 share)+비밀번호 설정."""
+    """관리 자격 적용 — 비밀번호 비면 해제, 있으면 아이디(기본 manage)+비밀번호 설정."""
     pw = (payload.password or "").strip()
     if not pw:
-        case.share_username = None
-        case.share_password = None
+        case.manage_username = None
+        case.manage_password = None
         return
     if len(pw) < 4:
         raise HTTPException(status_code=400, detail="비밀번호는 4자 이상이어야 합니다")
-    case.share_username = (payload.username or "").strip() or "share"
-    case.share_password = pw
+    case.manage_username = (payload.username or "").strip() or "manage"
+    case.manage_password = pw
 
 
 @router.post(
     "/api/applications/manage/{manage_token}/submit",
     response_model=schemas.ManageSubmitResponse,
 )
-def submit_manage(manage_token: str, db: Session = Depends(get_db)):
+def submit_manage(manage_token: str, request: Request, db: Session = Depends(get_db)):
     """기관 대표가 검토를 마치고 최종 제출 — 이때부터 담당자 시스템(표창 관리)에 노출된다.
 
     대상자 추가 링크는 그대로 열려 있어, 이후 추가분은 담당자에게 바로 보인다."""
     case = get_case_by_manage_token_or_404(db, manage_token)
+    if not _manage_authorized(case, request):
+        raise HTTPException(status_code=401, detail="관리 자격이 필요합니다.")
     if len(case.recipients) < 1:
         raise HTTPException(
             status_code=400,
@@ -437,10 +444,12 @@ def submit_manage(manage_token: str, db: Session = Depends(get_db)):
 
 # --- 대표(중간관리자) 대상자 검토·수정 — 관리 토큰 기반, 최종 제출 전에만 ---
 def _manage_recipient_or_404(
-    db: Session, manage_token: str, recipient_id: str
+    db: Session, manage_token: str, recipient_id: str, request: Request
 ) -> "models.Recipient":
-    """관리 토큰의 신청 건에 속한 대상자 조회. 다른 건의 대상자면 404."""
+    """관리 토큰의 신청 건에 속한 대상자 조회. 자격 미달이면 401, 다른 건의 대상자면 404."""
     case = get_case_by_manage_token_or_404(db, manage_token)
+    if not _manage_authorized(case, request):
+        raise HTTPException(status_code=401, detail="관리 자격이 필요합니다.")
     r = (
         db.query(models.Recipient)
         .filter(
@@ -458,9 +467,11 @@ def _manage_recipient_or_404(
     "/api/applications/manage/{manage_token}/recipients/{recipient_id}",
     response_model=schemas.RecipientDetail,
 )
-def get_manage_recipient(manage_token: str, recipient_id: str, db: Session = Depends(get_db)):
+def get_manage_recipient(
+    manage_token: str, recipient_id: str, request: Request, db: Session = Depends(get_db)
+):
     """대표가 검토용으로 대상자 1명의 전체 정보(기본+공적사항)를 조회."""
-    _, r = _manage_recipient_or_404(db, manage_token, recipient_id)
+    _, r = _manage_recipient_or_404(db, manage_token, recipient_id, request)
     return schemas.RecipientDetail.model_validate(r)
 
 
@@ -472,12 +483,13 @@ def update_manage_recipient(
     manage_token: str,
     recipient_id: str,
     payload: schemas.ManageRecipientUpdate,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """대표가 대상자 1명의 기본정보+공적사항을 수정. 최종 제출 후에는 차단."""
     from .merit_contents import _ensure_merit_content
 
-    case, r = _manage_recipient_or_404(db, manage_token, recipient_id)
+    case, r = _manage_recipient_or_404(db, manage_token, recipient_id, request)
     if case.applicant_submitted:
         raise HTTPException(
             status_code=403, detail="최종 제출 후에는 수정할 수 없습니다. 담당자에게 문의해 주세요."
@@ -501,10 +513,10 @@ def update_manage_recipient(
 
 @router.delete("/api/applications/manage/{manage_token}/recipients/{recipient_id}")
 def delete_manage_recipient(
-    manage_token: str, recipient_id: str, db: Session = Depends(get_db)
+    manage_token: str, recipient_id: str, request: Request, db: Session = Depends(get_db)
 ):
     """대표가 잘못/중복 들어온 대상자를 제외. 최종 제출 후에는 차단."""
-    case, r = _manage_recipient_or_404(db, manage_token, recipient_id)
+    case, r = _manage_recipient_or_404(db, manage_token, recipient_id, request)
     if case.applicant_submitted:
         raise HTTPException(
             status_code=403, detail="최종 제출 후에는 제외할 수 없습니다. 담당자에게 문의해 주세요."

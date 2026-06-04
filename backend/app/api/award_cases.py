@@ -213,30 +213,30 @@ async def import_xlsx(case_id: str, file: UploadFile = File(...), db: Session = 
     return _to_detail(case)
 
 
-# --- 공유 링크 자격(아이디/비밀번호) — 담당자(관리자)용 조회·재설정 ---
-# 작성자가 자격을 잊으면 담당자에게 문의하므로, 관리자가 평문으로 확인하고 재설정할 수 있다.
-@router.get("/{case_id}/share-credentials", response_model=schemas.ShareCredentialsRead)
-def get_share_credentials(case_id: str, db: Session = Depends(get_db)):
+# --- 관리 링크 자격(아이디/비밀번호) — 담당자(관리자)용 조회·재설정 ---
+# 대표가 관리 링크 자격을 잊으면 담당자에게 문의하므로, 관리자가 평문으로 확인하고 재설정할 수 있다.
+@router.get("/{case_id}/manage-credentials", response_model=schemas.ManageCredentialsRead)
+def get_manage_credentials(case_id: str, db: Session = Depends(get_db)):
     case = get_case_or_404(db, case_id)
-    return schemas.ShareCredentialsRead(
-        protected=bool(case.share_password),
-        username=case.share_username or "",
-        password=case.share_password or "",
+    return schemas.ManageCredentialsRead(
+        protected=bool(case.manage_password),
+        username=case.manage_username or "",
+        password=case.manage_password or "",
     )
 
 
-@router.put("/{case_id}/share-credentials", response_model=schemas.ShareCredentialsRead)
-def set_share_credentials(
-    case_id: str, payload: schemas.ShareCredentialsUpdate, db: Session = Depends(get_db)
+@router.put("/{case_id}/manage-credentials", response_model=schemas.ManageCredentialsRead)
+def set_manage_credentials(
+    case_id: str, payload: schemas.ManageCredentialsUpdate, db: Session = Depends(get_db)
 ):
-    from .applications import _apply_share_credentials
+    from .applications import _apply_manage_credentials
 
     case = get_case_or_404(db, case_id)
-    _apply_share_credentials(case, payload)
+    _apply_manage_credentials(case, payload)
     db.commit()
     db.refresh(case)
-    return schemas.ShareCredentialsRead(
-        protected=bool(case.share_password),
-        username=case.share_username or "",
-        password=case.share_password or "",
+    return schemas.ManageCredentialsRead(
+        protected=bool(case.manage_password),
+        username=case.manage_username or "",
+        password=case.manage_password or "",
     )
