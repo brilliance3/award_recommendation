@@ -43,6 +43,9 @@ def _manage_authorized(case: models.AwardCase, request: Request) -> bool:
 # 공유 링크 유효기간(일) — 만료되면 자가추가 차단(담당자가 회수/갱신 가능)
 SHARE_TOKEN_TTL_DAYS = 30
 
+# 개인정보 동의 문안 버전 — 문안 변경 시 갱신(사후 증빙용)
+CONSENT_VERSION = "2026-06-04"
+
 # 짧은 코드 알파벳 — 혼동 문자(O,0,I,1,L) 제외
 _CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
@@ -84,10 +87,17 @@ def _create_recipient_from_payload(
     idx: int,
     submitter_ip: str,
     now: datetime,
+    consent_path: str = "self_apply",
 ) -> str:
     """ApplicationRecipient 1건 → Recipient + Checklist + MeritContent + 경력 + 과거표창 생성.
 
-    submit_application(일괄)과 add_recipient_by_token(자가추가) 양쪽에서 공용. recipient.id 반환."""
+    submit_application(일괄)과 add_recipient_by_token(자가추가) 양쪽에서 공용. recipient.id 반환.
+    개인정보 수집·이용 및 제공 활용 동의는 필수 — 미동의 시 생성 차단."""
+    if not r_payload.consent:
+        raise HTTPException(
+            status_code=400,
+            detail="개인정보 수집·이용 및 제공 활용 동의(필수)가 필요합니다.",
+        )
     recipient = models.Recipient(
         award_case_id=case.id,
         sequence_no=idx,
@@ -107,6 +117,10 @@ def _create_recipient_from_payload(
         recommendation_rank="1순위",
         # 희망표창일을 각 대상자 초기값으로 복제(이후 담당자가 개인별 수정 가능)
         award_date=case.award_date,
+        # 동의 로깅 — 동의 시각·문안 버전·입력 경로
+        consent_at=now,
+        consent_version=CONSENT_VERSION,
+        consent_path=consent_path,
     )
     db.add(recipient)
     db.flush()
@@ -270,8 +284,11 @@ def submit_application(
     submitter_ip = (request.headers.get("x-forwarded-for") or client_host)[:64]
     now = datetime.utcnow()
 
+    consent_path = "self_apply" if payload.applicant_role == "individual" else "org_apply"
     recipient_ids = [
-        _create_recipient_from_payload(db, case, r_payload, idx, submitter_ip, now)
+        _create_recipient_from_payload(
+            db, case, r_payload, idx, submitter_ip, now, consent_path
+        )
         for idx, r_payload in enumerate(payload.recipients, start=1)
     ]
 
@@ -371,7 +388,9 @@ def add_recipient_by_token(
     submitter_ip = (request.headers.get("x-forwarded-for") or client_host)[:64]
     now = datetime.utcnow()
     idx = len(case.recipients) + 1
-    rid = _create_recipient_from_payload(db, case, payload, idx, submitter_ip, now)
+    rid = _create_recipient_from_payload(
+        db, case, payload, idx, submitter_ip, now, "self_add"
+    )
     db.flush()
 
     # 제목 자동 갱신 — "기관명_대표자 외 N명" (인원 증가 반영)
@@ -535,7 +554,9 @@ def add_manage_recipient(
     submitter_ip = (request.headers.get("x-forwarded-for") or client_host)[:64]
     now = datetime.utcnow()
     idx = len(case.recipients) + 1
-    rid = _create_recipient_from_payload(db, case, payload, idx, submitter_ip, now)
+    rid = _create_recipient_from_payload(
+        db, case, payload, idx, submitter_ip, now, "manage_add"
+    )
     db.flush()
     db.refresh(case)
     case.title = build_case_title(

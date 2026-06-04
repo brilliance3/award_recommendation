@@ -65,6 +65,10 @@ class RecipientRead(RecipientBase):
     updated_at: datetime
     # 관리자 검토(공직선거법) 완료 여부 — checklist.admin_reviewed_at 기반(서버 계산)
     admin_reviewed: bool = False
+    # 개인정보 동의 로깅
+    consent_at: Optional[datetime] = None
+    consent_version: Optional[str] = None
+    consent_path: Optional[str] = None
 
 
 class RecipientDetail(RecipientRead):

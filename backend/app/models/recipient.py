@@ -41,6 +41,11 @@ class Recipient(Base):
     award_date = Column(Date)
     note = Column(String(500))
 
+    # 개인정보 수집·이용 및 제공 활용 동의 로깅 (동의 시각=동의함, 문안 버전, 입력 경로)
+    consent_at = Column(DateTime)
+    consent_version = Column(String(20))
+    consent_path = Column(String(30))  # self_apply | self_add | org_apply | manage_add
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

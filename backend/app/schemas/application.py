@@ -51,6 +51,7 @@ class ApplicationRecipient(BaseModel):
     merit_content: ApplicationMeritContent
     careers: List[ApplicationCareerRecord] = Field(default_factory=list)
     previous_awards: List[ApplicationPreviousAward] = Field(default_factory=list)
+    consent: bool = False  # 개인정보 수집·이용 및 제공 활용 동의(필수)
 
 
 class ApplicationSubmit(BaseModel):
