@@ -540,8 +540,18 @@ export default function RecipientListPage() {
                   </span>
                 </div>
                 <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">
-                  기관 신청자자가 잊었을 때 아래 값을 알려주거나, 새로 재설정해 전달하세요.
+                  기관 신청자에게 아래 <strong>관리 링크 + 아이디·비밀번호</strong>를 전달하세요.
+                  잊었을 때 값을 알려주거나 새로 재설정할 수 있습니다.
                 </p>
+                {detail.manage_token && (
+                  <div className="mt-3">
+                    <span className="text-xs font-semibold text-ink-700">관리 링크(신청자 전달용)</span>
+                    <ShareLinkBox
+                      token={detail.manage_token}
+                      basePath="/apply/manage"
+                    />
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                   <label className="block">
                     <span className="text-xs font-semibold text-ink-700">아이디</span>

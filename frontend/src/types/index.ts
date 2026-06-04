@@ -21,6 +21,7 @@ export interface AwardCase {
   // 기관 신청자 공유 링크(대상자 자가추가) — 회수(enabled)·만료(expires_at)
   share_token?: string;
   share_code?: string;
+  manage_token?: string;
   share_enabled?: boolean;
   share_expires_at?: string;
   created_at: string;
