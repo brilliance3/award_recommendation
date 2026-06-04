@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import {
   getManageInfo,
   submitManageApplication,
@@ -21,12 +21,15 @@ import ShareLinkBox from "../components/ShareLinkBox";
  *  아이디/비밀번호로 인증해야 접근할 수 있다(작성 대상자 추가 링크는 별도로 개방). */
 export default function ManageApplicationPage() {
   const { token = "" } = useParams();
+  const location = useLocation();
+  // 제출 직후 전달된 자격(있으면 재입력 없이 바로 인증)
+  const initCreds = (location.state as { creds?: ManageCreds } | null)?.creds ?? null;
   const [info, setInfo] = useState<ManageCaseInfo | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // 관리 링크 자격 — 인증된 자격은 메모리에만 보관
-  const [creds, setCreds] = useState<ManageCreds | null>(null);
+  const [creds, setCreds] = useState<ManageCreds | null>(initCreds);
   const [authId, setAuthId] = useState("");
   const [authPw, setAuthPw] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
@@ -54,7 +57,7 @@ export default function ManageApplicationPage() {
       );
 
   useEffect(() => {
-    load();
+    load(initCreds ?? undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -247,11 +250,11 @@ export default function ManageApplicationPage() {
           </div>
         )}
 
-        {/* 대상자 추가 링크 — 대표가 각 대상자에게 배포(자격 없이 개방) */}
+        {/* 작성자에게 줄 링크 — 대표가 각 대상자에게 배포(자격 없이 개방) */}
         {info.share_token && (
-          <div className="krds-card krds-card-pad">
+          <div className="krds-card krds-card-pad border-brand-200 bg-brand-50/40">
             <h2 className="text-sm font-bold text-ink-800">
-              대상자 추가 링크 (각 추천대상자에게 전달)
+              ✋ 작성자에게 줄 링크 (각 추천대상자에게 전달)
             </h2>
             <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">
               이 링크를 받은 대상자가 본인 정보를 입력하면 아래 명단에 추가됩니다.
@@ -261,6 +264,18 @@ export default function ManageApplicationPage() {
             <ShareLinkBox token={info.share_token} basePath="/apply/add" />
           </div>
         )}
+
+        {/* 관리 링크 주소 — 대표가 나중에 다시 들어올 때 필요 */}
+        <div className="krds-card krds-card-pad">
+          <h2 className="text-sm font-bold text-ink-800">
+            이 관리 화면 주소 (대표 보관용)
+          </h2>
+          <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">
+            나중에 다시 검토·제출하러 들어올 때 필요합니다. 접속 시 설정한
+            아이디·비밀번호를 입력합니다. <strong>외부에 공유하지 마세요.</strong>
+          </p>
+          <ShareLinkBox token={token} basePath="/apply/manage" />
+        </div>
 
         {/* 관리 링크 비밀번호 — 이 관리 화면 보호 (변경/해제) */}
         <div className="krds-card krds-card-pad">

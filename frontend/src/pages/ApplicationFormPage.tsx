@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { submitApplication } from "../api";
 import { listLegislators, type Legislator } from "../api/settings";
 import type {
@@ -11,7 +12,6 @@ import Field, { Button, Input, TextArea } from "../components/Field";
 import DateInput from "../components/DateInput";
 import AwardSheetPreview from "../components/AwardSheetPreview";
 import PublicLayout from "../components/PublicLayout";
-import ShareLinkBox from "../components/ShareLinkBox";
 
 // 신청 폼 임시저장 키 (브라우저 localStorage)
 const DRAFT_KEY = "apply_draft_v1";
@@ -202,6 +202,7 @@ export function toApplicationRecipient(r: RecipientFormData): ApplicationRecipie
 }
 
 export default function ApplicationFormPage() {
+  const navigate = useNavigate();
   const [applicantRole, setApplicantRole] = useState<"individual" | "organization">("individual");
   const [applicantName, setApplicantName] = useState("");
   const [applicantOrg, setApplicantOrg] = useState("");
@@ -216,8 +217,6 @@ export default function ApplicationFormPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  // 기관 대표 신청 제출 후 발급되는 관리 토큰(검토·제출). 대상자 추가 링크는 관리 화면에서 복사.
-  const [manageToken, setManageToken] = useState<string | null>(null);
 
   // 모달 상태: null=닫힘, -1=새 추가, 0+=기존 인덱스 편집
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -475,8 +474,14 @@ export default function ApplicationFormPage() {
     setSubmitting(true);
     try {
       const res = await submitApplication(payload);
-      setManageToken(res.manage_token || null);
       clearDraft(); // 제출 완료 → 임시저장 삭제
+      // 기관 대표 신청: 방금 설정한 자격을 들고 검토·제출 화면으로 바로 진입(재입력 없음)
+      if (payload.applicant_role === "organization" && res.manage_token) {
+        navigate(`/apply/manage/${res.manage_token}`, {
+          state: { creds: { id: manageUser.trim() || "manage", pw: managePw } },
+        });
+        return;
+      }
       setSubmitted(true);
     } catch (err: any) {
       setSubmitError(
@@ -490,49 +495,20 @@ export default function ApplicationFormPage() {
   };
 
   if (submitted) {
-    const isOrgShare = applicantRole === "organization" && manageToken;
     return (
       <PublicLayout>
         <div className="max-w-2xl mx-auto">
-          {isOrgShare ? (
-            <div className="krds-card krds-card-pad border-success-500/40 bg-success-50">
-              <div className="text-center">
-                <div className="text-3xl mb-2">✅</div>
-                <h1 className="text-xl font-bold text-success-600 mb-1">
-                  신청이 생성되었습니다 (아직 최종 제출 전)
-                </h1>
-                <p className="text-sm text-ink-700 leading-relaxed">
-                  아래 <strong>검토·제출 관리 링크</strong>를 꼭 보관하세요. 이
-                  링크에서 <strong>대상자 추가 링크를 복사해 각 대상자에게 배포</strong>
-                  하고, 대상자가 모두 모이면 검토 후 <strong>최종 제출</strong>하세요.
-                </p>
-                <p className="text-xs text-danger-600 mt-1">
-                  ※ 최종 제출 전까지는 표창 담당자에게 보이지 않습니다.
-                </p>
-              </div>
-              <ShareLinkBox token={manageToken!} basePath="/apply/manage" />
-              <div className="mt-3 text-center">
-                <a
-                  href={`/apply/manage/${manageToken}`}
-                  className="inline-block rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
-                >
-                  검토·제출 화면 열기 →
-                </a>
-              </div>
-            </div>
-          ) : (
-            <div className="krds-card krds-card-pad border-success-500/40 bg-success-50 text-center py-10">
-              <div className="text-3xl mb-3">✅</div>
-              <h1 className="text-xl font-bold text-success-600 mb-2">
-                신청이 접수되었습니다
-              </h1>
-              <p className="text-sm text-ink-700 leading-relaxed">
-                제출하신 내용은 경기도의회 보건복지위원회 전문위원실에서 검토 후
-                표창 추천 절차에 반영됩니다. 추가 확인이 필요한 경우 신청자
-                연락처로 연락드릴 수 있습니다.
-              </p>
-            </div>
-          )}
+          <div className="krds-card krds-card-pad border-success-500/40 bg-success-50 text-center py-10">
+            <div className="text-3xl mb-3">✅</div>
+            <h1 className="text-xl font-bold text-success-600 mb-2">
+              신청이 접수되었습니다
+            </h1>
+            <p className="text-sm text-ink-700 leading-relaxed">
+              제출하신 내용은 경기도의회 보건복지위원회 전문위원실에서 검토 후
+              표창 추천 절차에 반영됩니다. 추가 확인이 필요한 경우 신청자
+              연락처로 연락드릴 수 있습니다.
+            </p>
+          </div>
         </div>
       </PublicLayout>
     );
