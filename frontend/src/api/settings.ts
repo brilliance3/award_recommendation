@@ -32,9 +32,17 @@ export interface SiteCredentials {
 export const getSiteCredentials = () =>
   api.get<SiteCredentials>("/api/settings/site-credentials").then(r => r.data);
 
-export const updateSiteCredentials = (username: string, password: string) =>
+export const updateSiteCredentials = (
+  username: string,
+  password: string,
+  currentPassword: string
+) =>
   api
-    .put<SiteCredentials>("/api/settings/site-credentials", { username, password })
+    .put<SiteCredentials>("/api/settings/site-credentials", {
+      username,
+      password,
+      current_password: currentPassword,
+    })
     .then(r => r.data);
 
 export const getSettings = () =>

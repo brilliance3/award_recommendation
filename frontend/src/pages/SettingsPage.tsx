@@ -27,6 +27,7 @@ export default function SettingsPage() {
   // 로그인 계정(사이트 접근 자격)
   const [cred, setCred] = useState<SiteCredentials | null>(null);
   const [credUser, setCredUser] = useState("");
+  const [credCurPw, setCredCurPw] = useState("");
   const [credPw, setCredPw] = useState("");
   const [credPw2, setCredPw2] = useState("");
   const [savingCred, setSavingCred] = useState(false);
@@ -49,6 +50,10 @@ export default function SettingsPage() {
   };
 
   const onSaveCred = async () => {
+    if (cred?.has_password && !credCurPw) {
+      alert("현재 비밀번호를 입력하세요.");
+      return;
+    }
     if (!credUser.trim()) {
       alert("아이디를 입력하세요.");
       return;
@@ -63,8 +68,13 @@ export default function SettingsPage() {
     }
     setSavingCred(true);
     try {
-      const updated = await updateSiteCredentials(credUser.trim(), credPw);
+      const updated = await updateSiteCredentials(
+        credUser.trim(),
+        credPw,
+        credCurPw
+      );
       setCred(updated);
+      setCredCurPw("");
       setCredPw("");
       setCredPw2("");
       alert(
@@ -296,6 +306,20 @@ export default function SettingsPage() {
             />
           </Field>
           <div className="hidden sm:block" />
+          {cred?.has_password && (
+            <>
+              <Field label="현재 비밀번호" hint="변경하려면 현재 비밀번호 확인이 필요합니다">
+                <Input
+                  type="password"
+                  value={credCurPw}
+                  onChange={e => setCredCurPw(e.target.value)}
+                  autoComplete="current-password"
+                  placeholder="현재 비밀번호 입력"
+                />
+              </Field>
+              <div className="hidden sm:block" />
+            </>
+          )}
           <Field label="새 비밀번호" hint="4자 이상">
             <Input
               type="password"

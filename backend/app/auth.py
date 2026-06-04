@@ -69,6 +69,13 @@ def current_username() -> str:
     return _username
 
 
+def verify_password(password: str) -> bool:
+    """현재 비밀번호 일치 여부(아이디 무관). 게이트 비활성 시 항상 통과."""
+    if not _password:
+        return True
+    return secrets.compare_digest(password.encode("utf-8"), _password.encode("utf-8"))
+
+
 # ---------- 세션 토큰 (HMAC 서명) ----------
 def _secret() -> bytes:
     """서명 키 — 현재 비밀번호에서 파생. 비밀번호 변경 시 기존 세션 무효화."""

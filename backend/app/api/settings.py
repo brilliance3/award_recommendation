@@ -180,6 +180,7 @@ class SiteCredentialsRead(BaseModel):
 class SiteCredentialsUpdate(BaseModel):
     username: str
     password: str
+    current_password: str = ""  # 변경 전 현재 비밀번호 확인용
 
 
 @router.get("/api/settings/site-credentials", response_model=SiteCredentialsRead)
@@ -192,9 +193,12 @@ def get_site_credentials():
 
 @router.put("/api/settings/site-credentials", response_model=SiteCredentialsRead)
 def update_site_credentials(payload: SiteCredentialsUpdate, db: Session = Depends(get_db)):
-    """로그인 아이디/비밀번호 변경. DB 저장 + 인메모리 캐시 즉시 갱신."""
+    """로그인 아이디/비밀번호 변경. 현재 비밀번호 확인 후 DB 저장 + 캐시 즉시 갱신."""
     username = payload.username.strip()
     password = payload.password
+    # 현재 비밀번호 확인 — 게이트가 설정돼 있으면 기존 비밀번호를 맞혀야 변경 가능
+    if auth.is_enabled() and not auth.verify_password(payload.current_password):
+        raise HTTPException(status_code=401, detail="현재 비밀번호가 올바르지 않습니다")
     if not username:
         raise HTTPException(status_code=400, detail="아이디를 입력하세요")
     if len(password) < 4:
