@@ -68,8 +68,10 @@ export default function SettingsPage() {
       setCredPw("");
       setCredPw2("");
       alert(
-        "로그인 계정을 변경했습니다.\n\n다음 접속부터 새 아이디/비밀번호가 필요합니다. 브라우저가 다시 로그인을 요청할 수 있습니다."
+        "로그인 계정을 변경했습니다.\n\n보안을 위해 자동 로그아웃됩니다. 새 아이디/비밀번호로 다시 로그인하세요."
       );
+      // 비밀번호 변경 시 기존 세션이 무효화되므로 로그인 화면으로 전환
+      window.dispatchEvent(new Event("auth-expired"));
     } catch (e: any) {
       alert("변경 실패: " + (e?.response?.data?.detail || e?.message || ""));
     } finally {

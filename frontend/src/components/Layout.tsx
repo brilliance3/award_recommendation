@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { getSettings } from "../api";
+import { getSettings, logout } from "../api";
 
 const nav = [
   { to: "/quota", label: "의원 쿼터 현황" },
@@ -38,7 +38,19 @@ export default function Layout() {
       <div className="bg-ink-900 text-ink-100 text-[11px] sm:text-xs">
         <div className="max-w-page mx-auto px-4 sm:px-6 lg:px-8 h-7 flex items-center justify-between">
           <span className="tracking-wide">경기도의회 · GYEONGGI PROVINCIAL COUNCIL</span>
-          <span className="hidden sm:inline text-ink-300">행정 내부 시스템</span>
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:inline text-ink-300">행정 내부 시스템</span>
+            <button
+              type="button"
+              onClick={async () => {
+                await logout().catch(() => {});
+                window.dispatchEvent(new Event("auth-expired"));
+              }}
+              className="text-ink-200 hover:text-white underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 rounded"
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
       </div>
 

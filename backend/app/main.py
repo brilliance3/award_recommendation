@@ -1,6 +1,4 @@
 """FastAPI 앱 엔트리포인트"""
-import base64
-import binascii
 import logging
 import re
 import traceback
@@ -8,7 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import (
@@ -19,9 +17,11 @@ from .api import (
     documents,
     merit_contents,
     recipients,
+    session,
     settings,
 )
 from . import auth
+from .api.session import COOKIE_NAME
 from .config import ALLOWED_ORIGINS
 from .database import init_db
 
@@ -79,30 +79,33 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # 로그인 없이 접근 가능한 경로 (로그인 화면 렌더·인증 처리에 필요)
+    _PUBLIC_PATHS = {
+        "/api/health",
+        "/api/auth/login",
+        "/api/auth/logout",
+        "/api/auth/me",
+    }
+
     @app.middleware("http")
-    async def _basic_auth(request: Request, call_next):
-        """외부 노출 차단 — HTTP Basic 인증. 자격은 auth 모듈(DB 우선·env 폴백)에서 가져온다.
-        헬스체크(/api/health)와 CORS 프리플라이트(OPTIONS)는 통과."""
+    async def _session_gate(request: Request, call_next):
+        """외부 노출 차단 — 세션 쿠키 인증. 자격은 auth 모듈(DB 우선·env 폴백).
+        - 게이트 비활성(비밀번호 미설정) 시 통과
+        - 헬스체크·인증 API·CORS 프리플라이트(OPTIONS) 통과
+        - 프론트 정적 셸(비-/api 경로)은 공개 → SPA 가 로그인 화면을 렌더
+        - 그 외 모든 /api/* 데이터 요청은 유효한 세션 쿠키 필요
+        """
         if not auth.is_enabled():
             return await call_next(request)
-        if request.method == "OPTIONS" or request.url.path == "/api/health":
+        path = request.url.path
+        if request.method == "OPTIONS" or path in _PUBLIC_PATHS:
             return await call_next(request)
-
-        unauthorized = Response(
-            status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="award", charset="UTF-8"'},
-        )
-        header = request.headers.get("authorization", "")
-        if not header.startswith("Basic "):
-            return unauthorized
-        try:
-            decoded = base64.b64decode(header[6:]).decode("utf-8")
-            user, _, pw = decoded.partition(":")
-        except (binascii.Error, UnicodeDecodeError):
-            return unauthorized
-        if not auth.verify(user, pw):
-            return unauthorized
-        return await call_next(request)
+        if not path.startswith("/api/"):
+            return await call_next(request)  # 정적 셸/SPA 라우팅
+        token = request.cookies.get(COOKIE_NAME, "")
+        if token and auth.verify_session(token):
+            return await call_next(request)
+        return JSONResponse(status_code=401, content={"detail": "로그인이 필요합니다"})
 
     @app.on_event("startup")
     def _startup() -> None:
@@ -136,6 +139,7 @@ def create_app() -> FastAPI:
     app.include_router(applications.router)
     app.include_router(dashboards.router)
     app.include_router(settings.router)
+    app.include_router(session.router)
 
     # --- 프론트엔드(SPA) 정적 서빙 ---
     # 회사 인트라넷이 vercel.app은 막고 fly.dev는 통과시키므로, 백엔드(fly.dev)가

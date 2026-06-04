@@ -9,6 +9,7 @@ const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL || "";
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: { "Content-Type": "application/json" },
+  withCredentials: true, // 세션 쿠키 전송
 });
 
 /** 백엔드 download_url(`/api/files/...`)을 브라우저에서 직접 열 수 있는 절대 URL로 */
@@ -25,6 +26,10 @@ api.interceptors.response.use(
     const cfg = err?.config || {};
     const status = err?.response?.status;
     const detail = err?.response?.data?.detail || err?.response?.data || err?.message;
+    // 세션 만료/미인증 — 로그인 화면으로 전환 (auth API 자체 호출은 제외)
+    if (status === 401 && !String(cfg.url || "").includes("/api/auth/")) {
+      window.dispatchEvent(new Event("auth-expired"));
+    }
     // eslint-disable-next-line no-console
     console.error(
       `[API 오류] ${cfg.method?.toUpperCase()} ${cfg.url}`,

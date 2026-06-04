@@ -1,16 +1,26 @@
-"""사이트 접근 자격(HTTP Basic) — 인메모리 캐시.
+"""사이트 접근 자격 + 세션 토큰 — 인메모리 캐시.
 
 우선순위: DB(AppSetting.site_*) 가 설정돼 있으면 그것을, 없으면 환경변수(SITE_*) 폴백.
 미들웨어가 매 요청마다 DB를 읽지 않도록 단일 프로세스 인메모리 캐시를 둔다.
 - 앱 시작 시 load_from_db() 로 DB 값을 캐시에 반영
 - 설정 화면에서 변경하면 set_cache() 로 즉시 갱신
+
+세션: 로그인 성공 시 HMAC 서명 토큰을 쿠키로 발급. 서명 키는 현재 비밀번호에서
+파생하므로 비밀번호/아이디가 바뀌면 기존 세션이 자동 무효화된다(재로그인 강제).
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import secrets
+import time
 
 from .config import SITE_PASSWORD as ENV_PASSWORD
 from .config import SITE_USERNAME as ENV_USERNAME
+
+# 세션 유효시간 (초). 12시간.
+SESSION_TTL = 60 * 60 * 12
 
 # 현재 유효 자격 (캐시). 기본값은 환경변수.
 _username: str = ENV_USERNAME
@@ -57,3 +67,33 @@ def verify(username: str, password: str) -> bool:
 
 def current_username() -> str:
     return _username
+
+
+# ---------- 세션 토큰 (HMAC 서명) ----------
+def _secret() -> bytes:
+    """서명 키 — 현재 비밀번호에서 파생. 비밀번호 변경 시 기존 세션 무효화."""
+    return hashlib.sha256(("award-session-v1::" + _password).encode("utf-8")).digest()
+
+
+def make_session_token(username: str) -> str:
+    """로그인 성공 후 발급할 세션 토큰."""
+    payload = f"{username}:{int(time.time()) + SESSION_TTL}"
+    sig = hmac.new(_secret(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return base64.urlsafe_b64encode(f"{payload}:{sig}".encode("utf-8")).decode("ascii")
+
+
+def verify_session(token: str) -> bool:
+    """세션 토큰 검증 — 서명·만료·현재 아이디 일치."""
+    try:
+        raw = base64.urlsafe_b64decode(token.encode("ascii")).decode("utf-8")
+        username, exp_s, sig = raw.rsplit(":", 2)
+        exp = int(exp_s)
+    except Exception:
+        return False
+    if exp < int(time.time()):
+        return False
+    payload = f"{username}:{exp}"
+    expected = hmac.new(_secret(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expected):
+        return False
+    return hmac.compare_digest(username.encode("utf-8"), _username.encode("utf-8"))
