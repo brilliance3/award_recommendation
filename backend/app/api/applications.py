@@ -241,15 +241,7 @@ def submit_application(
         ),
         applicant_submitted=(payload.applicant_role != "organization"),
     )
-    # 기관 대표 신청은 관리 링크 보호 자격(담당자용 아이디/비밀번호)을 필수로 설정한다.
-    if payload.applicant_role == "organization":
-        pw = (payload.manage_password or "").strip()
-        if len(pw) < 4:
-            raise HTTPException(
-                status_code=400, detail="담당자용 비밀번호(4자 이상)를 설정해 주세요."
-            )
-        case.manage_username = (payload.manage_username or "").strip() or "manage"
-        case.manage_password = pw
+    # 관리 링크 보호 자격(아이디/비밀번호)은 신청자가 아니라 관리자가 표창관리에서 설정한다.
     db.add(case)
     db.flush()
 

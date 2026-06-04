@@ -57,6 +57,7 @@ class CaseRow(BaseModel):
     applicant_name: Optional[str]
     applicant_contact: Optional[str]
     applicant_role: Optional[str] = None  # 'individual'|'organization'=외부신청, None=내부 수기 생성
+    applicant_submitted: bool = True  # False=신청자가 아직 최종 제출 전(제출 전 배지)
     status: Optional[str]
 
 
@@ -195,9 +196,9 @@ def get_all_cases(
     """
     term_start, term_end = current_term_range(today)
     q = db.query(models.AwardCase).filter(models.AwardCase.deleted_at.is_(None))
-    # 기관 대표가 아직 '최종 제출'하지 않은 건(applicant_submitted=False)은 담당자 목록에서 숨김.
-    # 일반/개인/수동·기존 건은 True(또는 NULL)이라 그대로 보인다.
-    q = q.filter(models.AwardCase.applicant_submitted.isnot(False))
+    # 공유 링크가 발급되면(기관 신청 제출) 최종 제출 전에도 표창관리 목록에 노출한다.
+    # 관리자가 그 안에서 관리 링크 자격(아이디/비밀번호)을 설정·전달할 수 있게 하기 위함.
+    # 신청자 최종 제출 여부는 applicant_submitted 로 목록에서 '제출 전' 배지로 구분한다.
     if legislator:
         q = q.filter(models.AwardCase.recommender_name == legislator)
     cases = q.order_by(models.AwardCase.created_at.desc()).all()
@@ -225,6 +226,7 @@ def get_all_cases(
                 applicant_name=c.applicant_name,
                 applicant_contact=c.applicant_contact,
                 applicant_role=c.applicant_role,
+                applicant_submitted=bool(c.applicant_submitted),
                 status=c.status,
             )
         )

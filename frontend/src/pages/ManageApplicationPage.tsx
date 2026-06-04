@@ -3,7 +3,6 @@ import { useLocation, useParams } from "react-router-dom";
 import {
   getManageInfo,
   submitManageApplication,
-  changeManageCredentials,
   addManageRecipient,
   getManageRecipient,
   updateManageRecipient,
@@ -43,11 +42,6 @@ export default function ManageApplicationPage() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authChecking, setAuthChecking] = useState(false);
 
-  // 관리 비밀번호 변경/해제
-  const [credUser, setCredUser] = useState("");
-  const [credPw, setCredPw] = useState("");
-  const [savingCred, setSavingCred] = useState(false);
-
   // 대상자 검토·수정·추가
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -57,7 +51,6 @@ export default function ManageApplicationPage() {
     getManageInfo(token, c ?? undefined)
       .then(s => {
         setInfo(s);
-        setCredUser(s.manage_username || "");
       })
       .catch(err =>
         setLoadError(
@@ -80,7 +73,6 @@ export default function ManageApplicationPage() {
       if (s.authorized) {
         setCreds(c);
         setInfo(s);
-        setCredUser(s.manage_username || "");
       } else {
         setAuthError("아이디 또는 비밀번호가 올바르지 않습니다.");
       }
@@ -126,35 +118,6 @@ export default function ManageApplicationPage() {
     }
   };
 
-  const onChangeCred = async () => {
-    if (!credUser.trim()) {
-      alert("아이디를 입력하세요.");
-      return;
-    }
-    if (credPw.length < 4) {
-      alert("비밀번호는 4자 이상이어야 합니다.");
-      return;
-    }
-    setSavingCred(true);
-    try {
-      await changeManageCredentials(
-        token,
-        credUser.trim(),
-        credPw,
-        creds ?? undefined
-      );
-      const next: ManageCreds = { id: credUser.trim(), pw: credPw };
-      setCreds(next); // 새 자격으로 세션 유지
-      setCredPw("");
-      await load(next);
-      alert("관리 비밀번호를 변경했습니다.");
-    } catch (err: any) {
-      alert("변경 실패: " + (err?.response?.data?.detail || err?.message || ""));
-    } finally {
-      setSavingCred(false);
-    }
-  };
-
   if (loadError) {
     return (
       <PublicLayout>
@@ -188,9 +151,9 @@ export default function ManageApplicationPage() {
             <div>
               <h1 className="krds-page-title">관리자 인증</h1>
               <p className="krds-page-sub leading-relaxed">
-                기관 신청자 관리 화면입니다. 신청 시 설정한 아이디와 비밀번호를
-                입력해 주세요. 잊으신 경우 표창 담당 전문위원실에 문의하면
-                확인·재설정해 드립니다.
+                기관 신청자 관리 화면입니다. 표창 담당 전문위원실에서 발급받은
+                아이디와 비밀번호를 입력해 주세요. 모르는 경우 담당 전문위원실에
+                문의해 주세요.
               </p>
             </div>
           </div>
@@ -284,54 +247,6 @@ export default function ManageApplicationPage() {
             아이디·비밀번호를 입력합니다. <strong>외부에 공유하지 마세요.</strong>
           </p>
           <ShareLinkBox token={token} basePath="/apply/manage" />
-        </div>
-
-        {/* 관리 링크 비밀번호 — 이 관리 화면 보호 (변경/해제) */}
-        <div className="krds-card krds-card-pad">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <h2 className="text-sm font-bold text-ink-800">
-              관리 화면 비밀번호
-            </h2>
-            <span
-              className={`text-xs font-semibold ${
-                info.protected ? "text-success-700" : "text-ink-500"
-              }`}
-            >
-              {info.protected ? "보호 중" : "미설정(링크만으로 접근)"}
-            </span>
-          </div>
-          <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">
-            이 관리 화면(검토·수정·최종제출)에 접근할 때 요구하는 아이디·비밀번호입니다.
-            변경하면 다음 접속부터 새 자격이 필요합니다.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-            <Field label="아이디">
-              <Input
-                value={credUser}
-                onChange={e => setCredUser(e.target.value)}
-                autoComplete="off"
-              />
-            </Field>
-            <Field label="비밀번호" hint="4자 이상. 변경 시 새로 입력">
-              <Input
-                type="password"
-                value={credPw}
-                onChange={e => setCredPw(e.target.value)}
-                autoComplete="new-password"
-                placeholder={info.protected ? "변경하려면 입력" : "설정할 비밀번호"}
-              />
-            </Field>
-          </div>
-          <div className="flex gap-2 mt-3">
-            <Button
-              type="button"
-              size="sm"
-              onClick={onChangeCred}
-              disabled={savingCred}
-            >
-              {info.protected ? "비밀번호 변경" : "비밀번호 설정"}
-            </Button>
-          </div>
         </div>
 
         {/* 모인 대상자 명단 */}

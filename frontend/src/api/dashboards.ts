@@ -36,6 +36,7 @@ export interface CaseRow {
   applicant_name?: string;
   applicant_contact?: string;
   applicant_role?: "individual" | "organization" | string; // 외부신청 식별(없으면 내부 수기)
+  applicant_submitted?: boolean; // false=신청자 최종 제출 전
   status?: string;
 }
 

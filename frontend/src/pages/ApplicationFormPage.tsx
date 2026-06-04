@@ -208,9 +208,6 @@ export default function ApplicationFormPage() {
   const [applicantOrg, setApplicantOrg] = useState("");
   const [applicantContact, setApplicantContact] = useState("");
   const [applicantDeliveryAddress, setApplicantDeliveryAddress] = useState("");
-  // 기관 신청자 신청 시 관리 링크 보호 자격(선택)
-  const [manageUser, setManageUser] = useState("");
-  const [managePw, setManagePw] = useState("");
   const [recommenderName, setRecommenderName] = useState("");
   const [awardDate, setAwardDate] = useState("");
   const [recipients, setRecipients] = useState<RecipientFormData[]>([]);
@@ -447,16 +444,6 @@ export default function ApplicationFormPage() {
       return;
     }
 
-    if (applicantRole === "organization") {
-      if (!manageUser.trim()) {
-        setSubmitError("담당자용 아이디를 입력해 주세요.");
-        return;
-      }
-      if (managePw.length < 4) {
-        setSubmitError("담당자용 비밀번호(4자 이상)를 설정해 주세요.");
-        return;
-      }
-    }
     const payload: ApplicationSubmit = {
       applicant_role: applicantRole,
       applicant_name: applicantName.trim(),
@@ -465,9 +452,6 @@ export default function ApplicationFormPage() {
       applicant_delivery_address: applicantDeliveryAddress.trim() || undefined,
       recommender_name: recommenderName.trim(),
       award_date: awardDate || undefined,
-      manage_username:
-        applicantRole === "organization" ? manageUser.trim() : undefined,
-      manage_password: applicantRole === "organization" ? managePw : undefined,
       recipients: recipients.map(toApplicationRecipient),
     };
 
@@ -475,11 +459,9 @@ export default function ApplicationFormPage() {
     try {
       const res = await submitApplication(payload);
       clearDraft(); // 제출 완료 → 임시저장 삭제
-      // 기관 신청자 신청: 방금 설정한 자격을 들고 검토·제출 화면으로 바로 진입(재입력 없음)
+      // 기관 신청: 제출 직후 검토·제출 화면으로 바로 진입(관리 비밀번호는 관리자가 이후 설정)
       if (payload.applicant_role === "organization" && res.manage_token) {
-        navigate(`/apply/manage/${res.manage_token}`, {
-          state: { creds: { id: manageUser.trim() || "manage", pw: managePw } },
-        });
+        navigate(`/apply/manage/${res.manage_token}`);
         return;
       }
       setSubmitted(true);
@@ -643,38 +625,6 @@ export default function ApplicationFormPage() {
             />
           </Field>
 
-          {applicantRole === "organization" && (
-            <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-3 sm:p-4">
-              <h3 className="text-sm font-bold text-ink-800">
-                담당자용 아이디 비밀번호 생성
-              </h3>
-              <p className="text-xs text-ink-600 mt-1 leading-relaxed">
-                제출 후 받는 <strong>관리 링크</strong>(대상자 검토·수정·최종제출)를
-                보호할 아이디·비밀번호입니다. 관리 링크를 열 때 입력해야 하며,
-                <strong> 반드시 설정해야 합니다.</strong> 대상자 추가 링크는 비밀번호 없이
-                개방됩니다.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                <Field label="담당자용 아이디" required hint="비우면 'manage'로 설정">
-                  <Input
-                    value={manageUser}
-                    onChange={e => setManageUser(e.target.value)}
-                    autoComplete="off"
-                    placeholder="예: 봉사회"
-                  />
-                </Field>
-                <Field label="담당자용 비밀번호" required hint="4자 이상">
-                  <Input
-                    type="password"
-                    value={managePw}
-                    onChange={e => setManagePw(e.target.value)}
-                    autoComplete="new-password"
-                    placeholder="설정할 비밀번호"
-                  />
-                </Field>
-              </div>
-            </div>
-          )}
         </section>
 
         {/* 추천의원 정보 */}

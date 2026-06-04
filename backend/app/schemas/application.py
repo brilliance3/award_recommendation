@@ -68,10 +68,7 @@ class ApplicationSubmit(BaseModel):
     # 훈격은 경기도의회 의장 표창 단일(도지사 표창은 별도 기능 제거됨).
     award_date: Optional[date] = None  # 희망 표창일 (선택)
 
-    # 기관 대표 신청 시 관리 링크(/apply/manage) 보호 자격(선택). 설정하면 관리 링크에
-    # 아이디/비밀번호 요구. 비우면 관리 링크는 토큰만으로 접근.
-    manage_username: Optional[str] = ""
-    manage_password: Optional[str] = ""
+    # 관리 링크 보호 자격은 신청자가 설정하지 않는다(관리자가 표창관리에서 관리).
 
     # 대상자 — 개인 신청은 본인 1명 이상, 기관 대표 신청은 0명 허용(공유 URL로 자가추가).
     # 역할별 최소개수는 핸들러(submit_application)에서 검증한다.

@@ -23,6 +23,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 const isExternal = (r: CaseRow) => !!r.applicant_role;
 const isDone = (r: CaseRow) => (r.status || "") === "완료";
+const isPreSubmit = (r: CaseRow) => r.applicant_submitted === false;
 
 /** 목록 행/카드 배경 — 완료=회색 음영(우선), 외부신청=강조(앰버). */
 function rowHighlight(r: CaseRow): string {
@@ -296,6 +297,14 @@ export default function AllCasesPage() {
                           외부신청
                         </span>
                       )}
+                      {isPreSubmit(r) && (
+                        <span
+                          className="krds-badge bg-orange-100 text-orange-800 ml-1.5 align-middle whitespace-nowrap"
+                          title="신청자가 아직 최종 제출하지 않았습니다. 관리 링크 비밀번호를 설정·전달하세요."
+                        >
+                          제출 전
+                        </span>
+                      )}
                     </td>
                     <td>
                       {r.award_grade ? (
@@ -385,6 +394,11 @@ export default function AllCasesPage() {
                 {isExternal(r) && (
                   <span className="krds-badge bg-amber-100 text-amber-800 whitespace-nowrap">
                     외부신청
+                  </span>
+                )}
+                {isPreSubmit(r) && (
+                  <span className="krds-badge bg-orange-100 text-orange-800 whitespace-nowrap">
+                    제출 전
                   </span>
                 )}
               </Link>
