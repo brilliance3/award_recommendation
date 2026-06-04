@@ -42,6 +42,8 @@ class AwardCase(Base):
     # 기관 대표 신청용 공유 링크 — 외부 피추천자가 이 토큰으로 본인 정보를 직접 1명씩 추가.
     # 기관 신청 시에만 발급(개인·수동 생성은 NULL). 회수(enabled=False)·만료(expires_at) 가능.
     share_token = Column(String(36), unique=True, index=True)
+    # 짧은 코드(작성자가 외우기/입력하기 쉬운 7자리). share_token 과 1:1, 같은 add 링크로 연결.
+    share_code = Column(String(12), unique=True, index=True)
     share_enabled = Column(Boolean, default=True, nullable=False)
     share_expires_at = Column(DateTime)
     # 관리 링크(/apply/manage) 보호 자격(선택) — 대표가 신청서 제출 시 설정.

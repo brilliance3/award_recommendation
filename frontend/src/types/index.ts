@@ -18,8 +18,9 @@ export interface AwardCase {
   status?: string;
   seal_applied?: boolean;
   chair_sign?: boolean;
-  // 기관 대표 신청 공유 링크(대상자 자가추가) — 회수(enabled)·만료(expires_at)
+  // 기관 신청자 공유 링크(대상자 자가추가) — 회수(enabled)·만료(expires_at)
   share_token?: string;
+  share_code?: string;
   share_enabled?: boolean;
   share_expires_at?: string;
   created_at: string;

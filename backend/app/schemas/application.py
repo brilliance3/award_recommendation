@@ -127,7 +127,8 @@ class ManageCaseInfo(BaseModel):
     recommender_name: Optional[str] = None
     award_grade: Optional[str] = None
     award_date: Optional[date] = None
-    share_token: Optional[str] = None  # 대표가 대상자 추가 링크를 다시 복사할 수 있게
+    share_token: Optional[str] = None  # 신청자가 대상자 추가 링크를 다시 복사할 수 있게
+    share_code: Optional[str] = None  # 작성자용 짧은 코드
     submitted: bool = False  # 최종 제출 여부(False면 담당자에게 아직 안 보임)
     recipient_count: int = 0
     recipients: List[ManageRecipientItem] = []

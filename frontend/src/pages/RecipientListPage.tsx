@@ -480,7 +480,7 @@ export default function RecipientListPage() {
           </p>
           {detail.share_enabled ? (
             <>
-              <ShareLinkBox token={detail.share_token} />
+              <ShareLinkBox token={detail.share_token} code={detail.share_code} qr />
               <div className="mt-2">
                 <Button
                   type="button"

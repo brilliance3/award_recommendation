@@ -231,9 +231,14 @@ export default function ManageApplicationPage() {
             <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">
               이 링크를 받은 대상자가 본인 정보를 입력하면 아래 명단에 추가됩니다.
               <strong> 작성자는 아이디·비밀번호 없이</strong> 바로 입력할 수
-              있습니다.
+              있습니다. (QR 스캔 또는 짧은 코드 입력으로도 접속 가능)
             </p>
-            <ShareLinkBox token={info.share_token} basePath="/apply/add" />
+            <ShareLinkBox
+              token={info.share_token}
+              basePath="/apply/add"
+              code={info.share_code}
+              qr
+            />
           </div>
         )}
 

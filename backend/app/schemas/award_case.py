@@ -62,6 +62,7 @@ class AwardCaseRead(AwardCaseBase):
     award_date_count: int = 0
     # 기관 대표 신청 공유 링크(자가추가용) — 담당자 화면에서 복사·회수에 사용
     share_token: Optional[str] = None
+    share_code: Optional[str] = None  # 작성자용 짧은 코드
     share_enabled: bool = True
     share_expires_at: Optional[datetime] = None
 

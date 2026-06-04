@@ -10,6 +10,7 @@ import DownloadPage from "./pages/DownloadPage";
 import ChecklistPage from "./pages/ChecklistPage";
 import ApplicationFormPage from "./pages/ApplicationFormPage";
 import AddRecipientPage from "./pages/AddRecipientPage";
+import EnterCodePage from "./pages/EnterCodePage";
 import ManageApplicationPage from "./pages/ManageApplicationPage";
 import AdminReviewPage from "./pages/AdminReviewPage";
 import QuotaPage from "./pages/QuotaPage";
@@ -22,7 +23,9 @@ export default function App() {
     <Routes>
       {/* 민간인 공용 신청 폼 — Layout 없이 단독 */}
       <Route path="/apply" element={<ApplicationFormPage />} />
-      {/* 기관 대표 공유 링크 — 피추천자 본인이 자기 정보 추가 */}
+      {/* 작성자용 짧은 코드 입력 (토큰 없이 진입) */}
+      <Route path="/apply/add" element={<EnterCodePage />} />
+      {/* 기관 신청자 공유 링크 — 피추천자 본인이 자기 정보 추가 */}
       <Route path="/apply/add/:token" element={<AddRecipientPage />} />
       {/* 기관 대표 전용 — 검토·최종 제출 관리 */}
       <Route path="/apply/manage/:token" element={<ManageApplicationPage />} />

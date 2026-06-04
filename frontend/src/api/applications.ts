@@ -88,6 +88,14 @@ export const getShareCaseInfo = (token: string) =>
     .get<ShareCaseInfo>(`/api/applications/by-token/${token}`)
     .then(r => r.data);
 
+/** 작성자용 짧은 코드 → 공유 토큰 변환 */
+export const resolveShareCode = (code: string) =>
+  api
+    .get<{ share_token: string }>(
+      `/api/applications/code/${encodeURIComponent(code)}`
+    )
+    .then(r => r.data);
+
 export const addRecipientByToken = (token: string, payload: ApplicationRecipient) =>
   api
     .post<ShareRecipientAddResponse>(
@@ -216,6 +224,7 @@ export interface ManageCaseInfo {
   award_grade?: string;
   award_date?: string;
   share_token?: string;
+  share_code?: string;
   submitted: boolean;
   recipient_count: number;
   recipients: ManageRecipientItem[];

@@ -43,6 +43,24 @@ def _manage_authorized(case: models.AwardCase, request: Request) -> bool:
 # 공유 링크 유효기간(일) — 만료되면 자가추가 차단(담당자가 회수/갱신 가능)
 SHARE_TOKEN_TTL_DAYS = 30
 
+# 짧은 코드 알파벳 — 혼동 문자(O,0,I,1,L) 제외
+_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+
+def _generate_share_code(db: Session) -> str:
+    """작성자용 7자리 짧은 코드 생성 (DB 충돌 시 재시도)."""
+    for _ in range(20):
+        code = "".join(secrets.choice(_CODE_ALPHABET) for _ in range(7))
+        exists = (
+            db.query(models.AwardCase)
+            .filter(models.AwardCase.share_code == code)
+            .first()
+        )
+        if not exists:
+            return code
+    # 극히 드문 연속 충돌 시 길이를 늘려 보장
+    return "".join(secrets.choice(_CODE_ALPHABET) for _ in range(10))
+
 
 def build_case_title(org_name, recipient_names) -> str:
     """표창 건명 생성: "기관명_대표자 외 N명".
@@ -242,6 +260,9 @@ def submit_application(
         applicant_submitted=(payload.applicant_role != "organization"),
     )
     # 관리 링크 보호 자격(아이디/비밀번호)은 신청자가 아니라 관리자가 표창관리에서 설정한다.
+    # 기관 신청은 작성자용 짧은 코드를 발급(긴 링크 대신 코드 입력/구두 전달 가능).
+    if payload.applicant_role == "organization":
+        case.share_code = _generate_share_code(db)
     db.add(case)
     db.flush()
 
@@ -265,6 +286,25 @@ def submit_application(
 
 # 공유 링크 1건당 최대 자가추가 인원(스팸/오남용 방지 — 최후 방어선)
 SHARE_MAX_RECIPIENTS = 100
+
+
+@router.get("/api/applications/code/{code}")
+def resolve_share_code(code: str, db: Session = Depends(get_db)):
+    """작성자용 짧은 코드 → 공유 토큰 변환(공개). 프론트가 /apply/add/{token} 으로 이동."""
+    c = (code or "").strip().upper()
+    case = (
+        db.query(models.AwardCase)
+        .filter(
+            models.AwardCase.share_code == c,
+            models.AwardCase.deleted_at.is_(None),
+        )
+        .first()
+        if c
+        else None
+    )
+    if not case or not case.share_token or not case.share_enabled:
+        raise HTTPException(status_code=404, detail="유효하지 않은 코드입니다.")
+    return {"share_token": case.share_token}
 
 
 @router.get(
@@ -365,6 +405,7 @@ def get_manage_info(manage_token: str, request: Request, db: Session = Depends(g
         award_grade=case.award_grade,
         award_date=case.award_date,
         share_token=case.share_token,
+        share_code=case.share_code,
         submitted=bool(case.applicant_submitted),
         recipient_count=len(case.recipients),
         recipients=[

@@ -111,6 +111,7 @@ def _apply_lightweight_migrations() -> None:
         ("award_cases", "seal_applied_at", "DATETIME"),
         ("award_cases", "chair_sign", "BOOLEAN DEFAULT 0 NOT NULL"),
         ("award_cases", "share_token", "VARCHAR(36)"),
+        ("award_cases", "share_code", "VARCHAR(12)"),
         ("award_cases", "share_enabled", "BOOLEAN DEFAULT 1 NOT NULL"),
         ("award_cases", "share_username", "VARCHAR(100)"),
         ("award_cases", "share_password", "VARCHAR(255)"),
