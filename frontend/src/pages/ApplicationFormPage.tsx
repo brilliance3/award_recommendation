@@ -68,8 +68,9 @@ export interface RecipientFormData {
   // 주요 경력 / 표창수여 현황
   careers: CareerRow[];
   previous_awards: PreviousAwardRow[];
-  // 개인정보 수집·이용 및 제공 활용 동의(필수)
-  consent: boolean;
+  // 개인정보 동의(필수) — 작성 전 체크 (수집·이용 / 제3자 제공·활용)
+  consent_collect: boolean;
+  consent_provide: boolean;
 }
 
 export function emptyRecipient(): RecipientFormData {
@@ -101,7 +102,8 @@ export function emptyRecipient(): RecipientFormData {
     full_merit_text: "",
     careers: [{ record_date: "", description: "" }],
     previous_awards: [{ award_date: "", description: "" }],
-    consent: false,
+    consent_collect: false,
+    consent_provide: false,
   };
 }
 
@@ -141,8 +143,8 @@ export function validateRecipient(r: RecipientFormData): string | null {
     return "체크리스트 본인 확인 이름이 기본정보의 성명과 일치하지 않습니다.";
   if (r.cl_confirm_birth !== r.birth_date)
     return "체크리스트 본인 확인 생년월일이 기본정보와 일치하지 않습니다.";
-  if (!r.consent)
-    return "개인정보 수집·이용 및 제공 활용 동의(필수)에 체크해 주세요.";
+  if (!r.consent_collect || !r.consent_provide)
+    return "개인정보 수집·이용 및 제3자 제공·활용 동의(필수)에 모두 체크해 주세요.";
   return null;
 }
 
@@ -203,7 +205,7 @@ export function toApplicationRecipient(r: RecipientFormData): ApplicationRecipie
         description: p.description.trim(),
       }))
       .filter(p => p.award_date || p.description),
-    consent: !!r.consent,
+    consent: !!(r.consent_collect && r.consent_provide),
   };
 }
 
@@ -876,6 +878,55 @@ export default function ApplicationFormPage() {
   );
 }
 
+/** 개인정보 수집·이용/제공 동의 박스 — 홈페이지 가입식(전체동의 + 항목별 필수 체크). 작성 전 노출. */
+function ConsentBox({
+  data,
+  onChange,
+}: {
+  data: RecipientFormData;
+  onChange: (patch: Partial<RecipientFormData>) => void;
+}) {
+  const all = data.consent_collect && data.consent_provide;
+  return (
+    <div className="rounded-lg border-2 border-brand-300 bg-brand-50/60 p-3 space-y-2">
+      <h4 className="text-sm font-bold text-ink-900">
+        개인정보 수집·이용 및 제공 동의 <span className="text-danger-600">(필수)</span>
+      </h4>
+      <div className="max-h-32 overflow-y-auto rounded border border-ink-200 bg-white p-2 text-xs text-ink-600 leading-relaxed space-y-1">
+        <p><strong>① 수집·이용</strong> — 경기도의회(보건복지전문위원실)가 의장 표창 추천 적격 심사·공적조서 작성·표창장 발급·발송·명단 관리를 위해 <strong>성명·생년월일·주소·연락처·소속·직위·공적사항</strong>을 수집·이용합니다. 주민등록번호 등 고유식별정보·민감정보는 수집하지 않습니다. 미선정 시 처리 종료 후 지체 없이 파기, 선정 시 보존연한 동안 보관.</p>
+        <p><strong>② 제3자 제공·활용</strong> — 추천자료 보완·결과 안내·표창 전달을 위해 추천기관·신청기관에, 표창장 등기 발송을 위해 우정사업본부에 필요한 범위에서 제공합니다.</p>
+        <p>동의를 거부할 권리가 있으나, 거부 시 표창 추천·심사·발급 절차가 제한됩니다. 대리 작성의 경우 대상자(또는 법정대리인)에게 위 내용을 고지하고 동의받았음을 확약합니다.</p>
+      </div>
+      <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-brand-800 border-b border-ink-200 pb-2">
+        <input
+          type="checkbox"
+          checked={all}
+          onChange={e =>
+            onChange({ consent_collect: e.target.checked, consent_provide: e.target.checked })
+          }
+        />
+        전체 동의
+      </label>
+      <label className="flex items-center gap-2 cursor-pointer text-sm text-ink-800">
+        <input
+          type="checkbox"
+          checked={data.consent_collect}
+          onChange={e => onChange({ consent_collect: e.target.checked })}
+        />
+        <span><span className="text-danger-600">[필수]</span> 개인정보 수집·이용 동의</span>
+      </label>
+      <label className="flex items-center gap-2 cursor-pointer text-sm text-ink-800">
+        <input
+          type="checkbox"
+          checked={data.consent_provide}
+          onChange={e => onChange({ consent_provide: e.target.checked })}
+        />
+        <span><span className="text-danger-600">[필수]</span> 제3자 제공·활용 동의</span>
+      </label>
+    </div>
+  );
+}
+
 export function RecipientCard({
   data,
   onChange,
@@ -896,6 +947,8 @@ export function RecipientCard({
   // 단계별 유효성(다음 버튼). 미충족이면 해당 단계에 머무르고 안내.
   const stepError = (s: number): string | null => {
     if (s === 0) {
+      if (!data.consent_collect || !data.consent_provide)
+        return "개인정보 수집·이용 및 제3자 제공·활용 동의(필수)에 모두 체크해 주세요.";
       const m: string[] = [];
       if (!data.recipient_name.trim()) m.push("성명");
       if (!data.birth_date) m.push("생년월일");
@@ -1005,6 +1058,7 @@ export function RecipientCard({
       {/* STEP 1 — 기본정보 */}
       {step === 0 && (
       <div className="space-y-3">
+        <ConsentBox data={data} onChange={onChange} />
         <h4 className="text-xs font-bold text-ink-600 uppercase tracking-wide">
           기본 정보
         </h4>
@@ -1442,32 +1496,6 @@ export function RecipientCard({
           </div>
         </div>
 
-        {/* 개인정보 수집·이용 및 제공 활용 동의 (필수) */}
-        <div className="rounded-lg border border-brand-300 bg-brand-50/50 p-3 space-y-2">
-          <p className="text-xs font-bold text-ink-800">개인정보 수집·이용 및 제공 활용 동의 (필수)</p>
-          <p className="text-xs text-ink-600 leading-relaxed">
-            경기도의회(보건복지전문위원실)는 의장 표창 추천을 위해
-            <strong> 성명·생년월일·주소·연락처·소속·직위·공적사항</strong>을 수집·이용하며,
-            추천기관·신청기관 및 등기 발송(우정사업본부)에 필요한 범위에서 제공·활용합니다.
-            주민등록번호 등 고유식별정보·민감정보는 수집하지 않습니다. 미선정 시 처리 종료 후
-            지체 없이 파기, 선정 시 관련 기록은 보존연한 동안 보관합니다. 동의를 거부할 수 있으나
-            거부 시 표창 추천·심사·발급 절차가 제한됩니다.
-          </p>
-          <label className="flex items-start gap-2 cursor-pointer text-sm font-semibold text-ink-900">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={!!data.consent}
-              onChange={e => onChange({ consent: e.target.checked })}
-            />
-            <span>
-              위 개인정보 수집·이용 및 제공·활용에 동의합니다.
-              <span className="block text-xs font-normal text-ink-500">
-                (대리 작성의 경우, 대상자 본인 또는 법정대리인에게 위 내용을 고지하고 동의를 받았음을 확약합니다.)
-              </span>
-            </span>
-          </label>
-        </div>
       </div>
       )}
 
