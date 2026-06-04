@@ -4,6 +4,7 @@ import {
   getShareCaseInfo,
   addRecipientByToken,
   type ShareCaseInfo,
+  type ShareCreds,
 } from "../api/applications";
 import {
   RecipientCard,
@@ -12,7 +13,7 @@ import {
   toApplicationRecipient,
   type RecipientFormData,
 } from "./ApplicationFormPage";
-import { Button } from "../components/Field";
+import Field, { Button, Input } from "../components/Field";
 import PublicLayout from "../components/PublicLayout";
 
 /** 기관 대표가 발급한 공유 링크(/apply/add/:token) — 피추천자 본인이 자기 정보를 1명 추가.
@@ -41,6 +42,13 @@ export default function AddRecipientPage() {
   const [error, setError] = useState<string | null>(null);
   const firstRun = useRef(true);
 
+  // 공유 링크 자격(보호된 링크) — 인증된 자격은 메모리에만 보관
+  const [creds, setCreds] = useState<ShareCreds | null>(null);
+  const [credId, setCredId] = useState("");
+  const [credPw, setCredPw] = useState("");
+  const [credError, setCredError] = useState<string | null>(null);
+  const [credChecking, setCredChecking] = useState(false);
+
   useEffect(() => {
     getShareCaseInfo(token)
       .then(setInfo)
@@ -51,6 +59,26 @@ export default function AddRecipientPage() {
         )
       );
   }, [token]);
+
+  const onCredSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setCredError(null);
+    setCredChecking(true);
+    try {
+      const next: ShareCreds = { id: credId.trim(), pw: credPw };
+      const result = await getShareCaseInfo(token, next);
+      if (result.authorized) {
+        setCreds(next);
+        setInfo(result);
+      } else {
+        setCredError("아이디 또는 비밀번호가 올바르지 않습니다.");
+      }
+    } catch {
+      setCredError("확인 중 오류가 발생했습니다. 다시 시도해 주세요.");
+    } finally {
+      setCredChecking(false);
+    }
+  };
 
   // 자동 임시저장 (첫 렌더는 건너뜀 — 복원값 그대로 보존)
   useEffect(() => {
@@ -88,7 +116,7 @@ export default function AddRecipientPage() {
     }
     setSubmitting(true);
     try {
-      await addRecipientByToken(token, toApplicationRecipient(draft));
+      await addRecipientByToken(token, toApplicationRecipient(draft), creds ?? undefined);
       try {
         localStorage.removeItem(DRAFT_KEY); // 제출 완료 → 임시저장 삭제
       } catch {
@@ -152,6 +180,51 @@ export default function AddRecipientPage() {
     return (
       <PublicLayout>
         <div className="max-w-2xl mx-auto text-ink-500">불러오는 중...</div>
+      </PublicLayout>
+    );
+  }
+
+  // 자격 보호된 링크 — 아직 인증 안 됨: 아이디/비밀번호 입력 게이트
+  if (info.protected && !info.authorized) {
+    return (
+      <PublicLayout>
+        <div className="max-w-md mx-auto">
+          <div className="krds-page-header">
+            <div>
+              <h1 className="krds-page-title">보호된 링크</h1>
+              <p className="krds-page-sub leading-relaxed">
+                신청 기관에서 받은 아이디와 비밀번호를 입력해 주세요. 모르는 경우
+                신청 기관 대표자 또는 담당 전문위원실에 문의해 주세요.
+              </p>
+            </div>
+          </div>
+          <form onSubmit={onCredSubmit} className="krds-card krds-card-pad space-y-4">
+            <Field label="아이디">
+              <Input
+                value={credId}
+                onChange={e => setCredId(e.target.value)}
+                autoFocus
+                required
+              />
+            </Field>
+            <Field label="비밀번호">
+              <Input
+                type="password"
+                value={credPw}
+                onChange={e => setCredPw(e.target.value)}
+                required
+              />
+            </Field>
+            {credError && (
+              <p className="text-sm text-danger-700 bg-danger-50 border border-danger-200 rounded-md px-3 py-2">
+                {credError}
+              </p>
+            )}
+            <Button type="submit" disabled={credChecking} block>
+              {credChecking ? "확인 중..." : "확인"}
+            </Button>
+          </form>
+        </div>
       </PublicLayout>
     );
   }

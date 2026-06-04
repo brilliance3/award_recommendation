@@ -2,6 +2,7 @@
 
 기관 대표 신청은 공유 토큰(share_token)을 발급해, 외부 피추천자가 그 링크로 본인 정보를
 한 명씩 직접 추가할 수 있다(공개 GET/POST by-token)."""
+import secrets
 import uuid
 from datetime import datetime, timedelta
 
@@ -14,6 +15,18 @@ from ..services.xlsx_generator import _extract_region_from_address
 from .deps import get_case_by_share_token_or_404, get_case_by_manage_token_or_404
 
 router = APIRouter(tags=["applications"])
+
+
+def _share_authorized(case: models.AwardCase, request: Request) -> bool:
+    """공유 링크 자격 검사. 자격 미설정이면 항상 통과.
+    설정 시 요청 헤더 X-Share-Id / X-Share-Pw 가 일치해야 함(상수시간 비교)."""
+    if not case.share_password:
+        return True
+    uid = request.headers.get("x-share-id", "")
+    pw = request.headers.get("x-share-pw", "")
+    ok_u = secrets.compare_digest(uid.encode("utf-8"), (case.share_username or "").encode("utf-8"))
+    ok_p = secrets.compare_digest(pw.encode("utf-8"), case.share_password.encode("utf-8"))
+    return ok_u and ok_p
 
 # 공유 링크 유효기간(일) — 만료되면 자가추가 차단(담당자가 회수/갱신 가능)
 SHARE_TOKEN_TTL_DAYS = 30
@@ -245,15 +258,22 @@ SHARE_MAX_RECIPIENTS = 100
     "/api/applications/by-token/{token}",
     response_model=schemas.ShareCaseInfo,
 )
-def get_share_case_info(token: str, db: Session = Depends(get_db)):
-    """공유 토큰으로 보는 신청 요약(공개). PII 최소 — 대상자 명단·생년월일·주소 미노출."""
+def get_share_case_info(token: str, request: Request, db: Session = Depends(get_db)):
+    """공유 토큰으로 보는 신청 요약(공개). PII 최소 — 대상자 명단·생년월일·주소 미노출.
+    자격이 설정된 링크는 헤더 자격이 맞아야 정보를 반환(틀리면 protected/authorized만)."""
     case = get_case_by_share_token_or_404(db, token)
+    protected = bool(case.share_password)
+    authorized = _share_authorized(case, request)
+    if protected and not authorized:
+        return schemas.ShareCaseInfo(protected=True, authorized=False)
     return schemas.ShareCaseInfo(
         organization=case.applicant_organization,
         recommender_name=case.recommender_name,
         award_grade=case.award_grade,
         award_date=case.award_date,
         recipient_count=len(case.recipients),
+        protected=protected,
+        authorized=True,
     )
 
 
@@ -272,6 +292,10 @@ def add_recipient_by_token(
     강한 본인확인: 체크리스트 본인확인 성명·생년월일이 입력한 기본정보와 일치해야 한다.
     중복(성명+생년월일) 차단, case별 인원 상한, 제목 자동 갱신."""
     case = get_case_by_share_token_or_404(db, token)
+
+    # 공유 링크 자격(설정 시) — 헤더 자격 불일치면 차단
+    if not _share_authorized(case, request):
+        raise HTTPException(status_code=401, detail="공유 링크 자격(아이디/비밀번호)이 필요합니다.")
 
     # 강한 본인확인 — 체크리스트 self_confirm 이 기본정보(성명·생년월일)와 일치해야 함
     if (payload.checklist.self_confirm_name or "").strip() != (payload.recipient_name or "").strip():
@@ -345,7 +369,46 @@ def get_manage_info(manage_token: str, db: Session = Depends(get_db)):
             )
             for r in case.recipients
         ],
+        share_protected=bool(case.share_password),
+        share_username=case.share_username or "",
     )
+
+
+@router.put(
+    "/api/applications/manage/{manage_token}/share-credentials",
+    response_model=schemas.ShareCredentialsRead,
+)
+def set_share_credentials_by_manage(
+    manage_token: str,
+    payload: schemas.ShareCredentialsUpdate,
+    db: Session = Depends(get_db),
+):
+    """기관 대표가 관리 화면에서 공유 링크 자격을 설정/변경/해제.
+    password 가 비면 자격 해제(공개). 설정 시 아이디·비밀번호 모두 필요."""
+    case = get_case_by_manage_token_or_404(db, manage_token)
+    _apply_share_credentials(case, payload)
+    db.commit()
+    db.refresh(case)
+    return schemas.ShareCredentialsRead(
+        protected=bool(case.share_password),
+        username=case.share_username or "",
+        password=case.share_password or "",
+    )
+
+
+def _apply_share_credentials(
+    case: models.AwardCase, payload: schemas.ShareCredentialsUpdate
+) -> None:
+    """공유 자격 적용 — 비밀번호 비면 해제, 있으면 아이디(기본 share)+비밀번호 설정."""
+    pw = (payload.password or "").strip()
+    if not pw:
+        case.share_username = None
+        case.share_password = None
+        return
+    if len(pw) < 4:
+        raise HTTPException(status_code=400, detail="비밀번호는 4자 이상이어야 합니다")
+    case.share_username = (payload.username or "").strip() or "share"
+    case.share_password = pw
 
 
 @router.post(

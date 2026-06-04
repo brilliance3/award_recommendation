@@ -88,6 +88,20 @@ class ShareCaseInfo(BaseModel):
     award_grade: Optional[str] = None  # 훈격
     award_date: Optional[date] = None  # 희망 표창일
     recipient_count: int = 0  # 현재까지 추가된 대상자 수
+    protected: bool = False  # 자격(아이디/비밀번호) 보호 여부
+    authorized: bool = True  # 보호 시 자격이 일치해 정보 열람 가능 여부
+
+
+class ShareCredentialsUpdate(BaseModel):
+    """공유 링크 자격 설정/변경 — password 가 비면 자격 해제(공개)."""
+    username: str = ""
+    password: str = ""
+
+
+class ShareCredentialsRead(BaseModel):
+    protected: bool = False
+    username: str = ""
+    password: str = ""  # 관리자/대표가 작성자에게 알려줄 수 있게 평문 반환
 
 
 class ShareRecipientAddResponse(BaseModel):
@@ -114,6 +128,8 @@ class ManageCaseInfo(BaseModel):
     submitted: bool = False  # 최종 제출 여부(False면 담당자에게 아직 안 보임)
     recipient_count: int = 0
     recipients: List[ManageRecipientItem] = []
+    share_protected: bool = False  # 공유 링크 자격 설정 여부
+    share_username: str = ""  # 설정된 아이디(대표가 확인·전달용)
 
 
 class ManageSubmitResponse(BaseModel):

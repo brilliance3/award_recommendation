@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { cancelAdminReview, deleteRecipient, getCase, importXlsx, updateCase, updateRecipient } from "../api";
+import { cancelAdminReview, deleteRecipient, getCase, importXlsx, updateCase, updateRecipient, getShareCredentials, setShareCredentials, type ShareCredentials } from "../api";
 import { absoluteUrl } from "../api/client";
 import type { AwardCaseDetail } from "../types";
 import { Button, Input } from "../components/Field";
@@ -39,6 +39,56 @@ export default function RecipientListPage() {
 
   // 공유 링크 회수/재개
   const [savingShare, setSavingShare] = useState(false);
+
+  // 공유 링크 자격(아이디/비밀번호) — 담당자 조회·재설정
+  const [shareCred, setShareCred] = useState<ShareCredentials | null>(null);
+  const [credUser, setCredUser] = useState("");
+  const [credPw, setCredPw] = useState("");
+  const [savingCred, setSavingCred] = useState(false);
+
+  const loadShareCred = async () => {
+    try {
+      const c = await getShareCredentials(caseId);
+      setShareCred(c);
+      setCredUser(c.username);
+      setCredPw(c.password);
+    } catch (err: any) {
+      alert("자격 조회 실패: " + (err?.response?.data?.detail || err?.message || ""));
+    }
+  };
+
+  const onSaveCred = async () => {
+    if (!credUser.trim() || credPw.length < 4) {
+      alert("아이디와 4자 이상 비밀번호를 입력하세요.");
+      return;
+    }
+    setSavingCred(true);
+    try {
+      const c = await setShareCredentials(caseId, credUser.trim(), credPw);
+      setShareCred(c);
+      alert("공유 링크 자격을 재설정했습니다. 작성자에게 새 아이디·비밀번호를 알려주세요.");
+    } catch (err: any) {
+      alert("재설정 실패: " + (err?.response?.data?.detail || err?.message || ""));
+    } finally {
+      setSavingCred(false);
+    }
+  };
+
+  const onClearCred = async () => {
+    if (!confirm("자격을 해제하면 누구나 링크로 대상자를 추가할 수 있습니다. 진행할까요?"))
+      return;
+    setSavingCred(true);
+    try {
+      const c = await setShareCredentials(caseId, "", "");
+      setShareCred(c);
+      setCredPw("");
+      alert("자격을 해제했습니다.");
+    } catch (err: any) {
+      alert("해제 실패: " + (err?.response?.data?.detail || err?.message || ""));
+    } finally {
+      setSavingCred(false);
+    }
+  };
 
   const load = () => getCase(caseId).then(setDetail);
   useEffect(() => {
@@ -478,6 +528,73 @@ export default function RecipientListPage() {
               </Button>
             </div>
           )}
+
+          {/* 공유 링크 자격(아이디/비밀번호) — 담당자 조회·재설정 */}
+          <div className="mt-4 pt-4 border-t border-blue-200/70">
+            {!shareCred ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={loadShareCred}
+              >
+                공유 링크 자격(아이디/비밀번호) 보기·관리
+              </Button>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <h3 className="text-sm font-bold text-ink-800">
+                    공유 링크 자격
+                  </h3>
+                  <span
+                    className={`text-xs font-semibold ${
+                      shareCred.protected ? "text-success-700" : "text-ink-500"
+                    }`}
+                  >
+                    {shareCred.protected ? "설정됨" : "미설정(공개)"}
+                  </span>
+                </div>
+                <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">
+                  작성자가 잊었을 때 아래 값을 알려주거나, 새로 재설정해 전달하세요.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  <label className="block">
+                    <span className="text-xs font-semibold text-ink-700">아이디</span>
+                    <Input
+                      className="mt-1"
+                      value={credUser}
+                      onChange={e => setCredUser(e.target.value)}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-semibold text-ink-700">비밀번호</span>
+                    <Input
+                      className="mt-1 font-mono"
+                      value={credPw}
+                      onChange={e => setCredPw(e.target.value)}
+                      placeholder="4자 이상"
+                    />
+                  </label>
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <Button type="button" size="sm" onClick={onSaveCred} disabled={savingCred}>
+                    {shareCred.protected ? "자격 재설정" : "자격 설정"}
+                  </Button>
+                  {shareCred.protected && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={onClearCred}
+                      disabled={savingCred}
+                    >
+                      자격 해제
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 

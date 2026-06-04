@@ -3,9 +3,10 @@ import { useParams } from "react-router-dom";
 import {
   getManageInfo,
   submitManageApplication,
+  setShareCredentialsByManage,
   type ManageCaseInfo,
 } from "../api/applications";
-import { Button } from "../components/Field";
+import Field, { Button, Input } from "../components/Field";
 import PublicLayout from "../components/PublicLayout";
 import ShareLinkBox from "../components/ShareLinkBox";
 
@@ -16,14 +17,60 @@ export default function ManageApplicationPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // 공유 링크 자격(아이디/비밀번호) 설정
+  const [credUser, setCredUser] = useState("");
+  const [credPw, setCredPw] = useState("");
+  const [savingCred, setSavingCred] = useState(false);
+
   const load = () =>
     getManageInfo(token)
-      .then(setInfo)
+      .then(s => {
+        setInfo(s);
+        setCredUser(s.share_username || "");
+      })
       .catch(err =>
         setLoadError(
           err?.response?.data?.detail || "유효하지 않은 관리 링크입니다."
         )
       );
+
+  const onSaveCred = async () => {
+    if (!credUser.trim()) {
+      alert("아이디를 입력하세요.");
+      return;
+    }
+    if (credPw.length < 4) {
+      alert("비밀번호는 4자 이상이어야 합니다.");
+      return;
+    }
+    setSavingCred(true);
+    try {
+      await setShareCredentialsByManage(token, credUser.trim(), credPw);
+      setCredPw("");
+      await load();
+      alert("공유 링크 자격을 설정했습니다. 이제 이 링크를 열려면 아이디·비밀번호가 필요합니다.");
+    } catch (err: any) {
+      alert("설정 실패: " + (err?.response?.data?.detail || err?.message || ""));
+    } finally {
+      setSavingCred(false);
+    }
+  };
+
+  const onClearCred = async () => {
+    if (!confirm("공유 링크 자격을 해제하면 누구나 링크로 대상자를 추가할 수 있습니다. 진행할까요?"))
+      return;
+    setSavingCred(true);
+    try {
+      await setShareCredentialsByManage(token, "", "");
+      setCredPw("");
+      await load();
+      alert("자격을 해제했습니다. 이제 링크만으로 접근할 수 있습니다.");
+    } catch (err: any) {
+      alert("해제 실패: " + (err?.response?.data?.detail || err?.message || ""));
+    } finally {
+      setSavingCred(false);
+    }
+  };
 
   useEffect(() => {
     load();
@@ -120,6 +167,66 @@ export default function ManageApplicationPage() {
               이 링크를 받은 대상자가 본인 정보를 입력하면 아래 명단에 추가됩니다.
             </p>
             <ShareLinkBox token={info.share_token} basePath="/apply/add" />
+
+            {/* 공유 링크 자격(아이디/비밀번호) 설정 — 선택 */}
+            <div className="mt-4 pt-4 border-t border-ink-100">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h3 className="text-sm font-bold text-ink-800">
+                  링크 보호 (아이디/비밀번호)
+                </h3>
+                <span
+                  className={`text-xs font-semibold ${
+                    info.share_protected ? "text-success-700" : "text-ink-500"
+                  }`}
+                >
+                  {info.share_protected ? "설정됨" : "미설정(공개)"}
+                </span>
+              </div>
+              <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">
+                설정하면 위 링크를 받은 사람도 아이디·비밀번호를 입력해야 정보를
+                추가할 수 있습니다. 작성자가 자격을 잊으면 표창 담당 전문위원실에
+                문의하면 확인·재설정해 드립니다.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                <Field label="아이디">
+                  <Input
+                    value={credUser}
+                    onChange={e => setCredUser(e.target.value)}
+                    autoComplete="off"
+                  />
+                </Field>
+                <Field label="비밀번호" hint="4자 이상. 변경 시 새로 입력">
+                  <Input
+                    type="password"
+                    value={credPw}
+                    onChange={e => setCredPw(e.target.value)}
+                    autoComplete="new-password"
+                    placeholder={info.share_protected ? "변경하려면 입력" : "설정할 비밀번호"}
+                  />
+                </Field>
+              </div>
+              <div className="flex gap-2 mt-3">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={onSaveCred}
+                  disabled={savingCred}
+                >
+                  {info.share_protected ? "자격 변경" : "자격 설정"}
+                </Button>
+                {info.share_protected && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={onClearCred}
+                    disabled={savingCred}
+                  >
+                    자격 해제
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
