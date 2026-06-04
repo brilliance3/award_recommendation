@@ -4,9 +4,14 @@ import {
   getManageInfo,
   submitManageApplication,
   setShareCredentialsByManage,
+  getManageRecipient,
+  updateManageRecipient,
+  deleteManageRecipient,
   type ManageCaseInfo,
+  type ManageRecipientBasic,
+  type ManageRecipientMerit,
 } from "../api/applications";
-import Field, { Button, Input } from "../components/Field";
+import Field, { Button, Input, TextArea } from "../components/Field";
 import PublicLayout from "../components/PublicLayout";
 import ShareLinkBox from "../components/ShareLinkBox";
 
@@ -21,6 +26,24 @@ export default function ManageApplicationPage() {
   const [credUser, setCredUser] = useState("");
   const [credPw, setCredPw] = useState("");
   const [savingCred, setSavingCred] = useState(false);
+
+  // 대상자 검토·수정 (대표 = 중간관리자)
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const onDeleteRecipient = async (rid: string, name?: string) => {
+    if (!confirm(`'${name || "이 대상자"}'를 명단에서 제외할까요? 되돌릴 수 없습니다.`))
+      return;
+    setDeletingId(rid);
+    try {
+      await deleteManageRecipient(token, rid);
+      await load();
+    } catch (err: any) {
+      alert("제외 실패: " + (err?.response?.data?.detail || err?.message || ""));
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const load = () =>
     getManageInfo(token)
@@ -235,6 +258,12 @@ export default function ManageApplicationPage() {
           <h2 className="text-sm font-bold text-ink-800 mb-2">
             추가된 추천대상자 ({info.recipient_count}명)
           </h2>
+          {!info.submitted && info.recipient_count > 0 && (
+            <p className="text-xs text-ink-500 mb-2">
+              최종 제출 전까지 각 대상자의 정보를 검토·수정하거나 잘못 들어온
+              대상자를 제외할 수 있습니다.
+            </p>
+          )}
           {info.recipients.length === 0 ? (
             <p className="text-sm text-ink-500">
               아직 추가된 대상자가 없습니다. 위 링크를 대상자에게 보내 주세요.
@@ -242,7 +271,10 @@ export default function ManageApplicationPage() {
           ) : (
             <ul className="divide-y divide-ink-100">
               {info.recipients.map((r, i) => (
-                <li key={i} className="py-2 flex items-center gap-2">
+                <li
+                  key={r.id || i}
+                  className="py-2 flex items-center gap-2 flex-wrap"
+                >
                   <span className="krds-badge krds-badge-ink shrink-0">
                     #{i + 1}
                   </span>
@@ -255,11 +287,44 @@ export default function ManageApplicationPage() {
                       .join(" · ")}
                     {r.merit_category ? ` · ${r.merit_category}` : ""}
                   </span>
+                  {!info.submitted && (
+                    <span className="ml-auto flex gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setEditingId(r.id)}
+                      >
+                        수정
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={deletingId === r.id}
+                        onClick={() => onDeleteRecipient(r.id, r.recipient_name)}
+                      >
+                        {deletingId === r.id ? "처리 중..." : "제외"}
+                      </Button>
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
           )}
         </div>
+
+        {editingId && (
+          <RecipientEditModal
+            manageToken={token}
+            recipientId={editingId}
+            onClose={() => setEditingId(null)}
+            onSaved={async () => {
+              setEditingId(null);
+              await load();
+            }}
+          />
+        )}
 
         {!info.submitted && (
           <div className="flex justify-end">
@@ -274,5 +339,167 @@ export default function ManageApplicationPage() {
         )}
       </div>
     </PublicLayout>
+  );
+}
+
+/** 대표 검토용 대상자 수정 모달 — 기본정보 + 공적사항. */
+function RecipientEditModal({
+  manageToken,
+  recipientId,
+  onClose,
+  onSaved,
+}: {
+  manageToken: string;
+  recipientId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [basic, setBasic] = useState<ManageRecipientBasic | null>(null);
+  const [merit, setMerit] = useState<ManageRecipientMerit>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getManageRecipient(manageToken, recipientId)
+      .then(d => {
+        setBasic({
+          recipient_name: d.recipient_name,
+          chinese_name: d.chinese_name,
+          birth_date: d.birth_date,
+          gender: d.gender,
+          address: d.address,
+          region: d.region,
+          occupation: d.occupation,
+          organization_name: d.organization_name,
+          recipient_position_title: d.recipient_position_title,
+          external_title: d.external_title,
+          rank_grade: d.rank_grade,
+          merit_category: d.merit_category,
+          merit_period: d.merit_period,
+          note: d.note,
+        });
+        setMerit(d.merit_content ?? {});
+      })
+      .catch(err =>
+        setError(err?.response?.data?.detail || "대상자 정보를 불러오지 못했습니다.")
+      );
+  }, [manageToken, recipientId]);
+
+  const setB = (k: keyof ManageRecipientBasic) => (v: string) =>
+    setBasic(prev => (prev ? { ...prev, [k]: v } : prev));
+  const setM = (k: keyof ManageRecipientMerit) => (v: string) =>
+    setMerit(prev => ({ ...prev, [k]: v }));
+
+  const onSave = async () => {
+    if (!basic) return;
+    if (!basic.recipient_name?.trim()) {
+      setError("성명을 입력하세요.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await updateManageRecipient(manageToken, recipientId, basic, merit);
+      onSaved();
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err?.message || "저장에 실패했습니다.");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center overflow-y-auto p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl my-6">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-ink-200 sticky top-0 bg-white rounded-t-lg">
+          <h3 className="text-base font-bold text-ink-900">대상자 정보 수정</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-ink-500 hover:text-ink-800 text-xl leading-none"
+            aria-label="닫기"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-5">
+          {error && (
+            <p className="text-sm text-danger-700 bg-danger-50 border border-danger-200 rounded-md px-3 py-2">
+              {error}
+            </p>
+          )}
+          {!basic ? (
+            <p className="text-sm text-ink-500">불러오는 중...</p>
+          ) : (
+            <>
+              <div>
+                <h4 className="text-sm font-bold text-ink-800 mb-2">기본정보</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="성명">
+                    <Input value={basic.recipient_name || ""} onChange={e => setB("recipient_name")(e.target.value)} />
+                  </Field>
+                  <Field label="한자">
+                    <Input value={basic.chinese_name || ""} onChange={e => setB("chinese_name")(e.target.value)} />
+                  </Field>
+                  <Field label="단체명">
+                    <Input value={basic.organization_name || ""} onChange={e => setB("organization_name")(e.target.value)} />
+                  </Field>
+                  <Field label="직위">
+                    <Input value={basic.recipient_position_title || ""} onChange={e => setB("recipient_position_title")(e.target.value)} />
+                  </Field>
+                  <Field label="공적분야">
+                    <Input value={basic.merit_category || ""} onChange={e => setB("merit_category")(e.target.value)} />
+                  </Field>
+                  <Field label="공적기간">
+                    <Input value={basic.merit_period || ""} onChange={e => setB("merit_period")(e.target.value)} />
+                  </Field>
+                  <Field label="직업">
+                    <Input value={basic.occupation || ""} onChange={e => setB("occupation")(e.target.value)} />
+                  </Field>
+                  <Field label="직급(공무원 등)">
+                    <Input value={basic.rank_grade || ""} onChange={e => setB("rank_grade")(e.target.value)} />
+                  </Field>
+                </div>
+                <div className="mt-3">
+                  <Field label="주소">
+                    <Input value={basic.address || ""} onChange={e => setB("address")(e.target.value)} />
+                  </Field>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-bold text-ink-800 mb-2">공적사항</h4>
+                <div className="space-y-3">
+                  <Field label="공적요지" hint="50자 내외">
+                    <TextArea rows={2} value={merit.merit_short_summary || ""} onChange={e => setM("merit_short_summary")(e.target.value)} />
+                  </Field>
+                  <Field label="추천사유">
+                    <TextArea rows={3} value={merit.recommendation_reason || ""} onChange={e => setM("recommendation_reason")(e.target.value)} />
+                  </Field>
+                  <Field label="공적사항(본문)">
+                    <TextArea rows={5} value={merit.full_merit_text || ""} onChange={e => setM("full_merit_text")(e.target.value)} />
+                  </Field>
+                  <Field label="성품">
+                    <TextArea rows={2} value={merit.character_assessment || ""} onChange={e => setM("character_assessment")(e.target.value)} />
+                  </Field>
+                  <Field label="지역여론">
+                    <TextArea rows={2} value={merit.local_reputation || ""} onChange={e => setM("local_reputation")(e.target.value)} />
+                  </Field>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 px-5 py-3 border-t border-ink-200 sticky bottom-0 bg-white rounded-b-lg">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
+            취소
+          </Button>
+          <Button type="button" onClick={onSave} disabled={saving || !basic}>
+            {saving ? "저장 중..." : "저장"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

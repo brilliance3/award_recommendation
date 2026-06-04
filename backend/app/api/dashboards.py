@@ -56,6 +56,7 @@ class CaseRow(BaseModel):
     recipient_names: List[str]
     applicant_name: Optional[str]
     applicant_contact: Optional[str]
+    applicant_role: Optional[str] = None  # 'individual'|'organization'=외부신청, None=내부 수기 생성
     status: Optional[str]
 
 
@@ -223,6 +224,7 @@ def get_all_cases(
                 recipient_names=[r.recipient_name for r in c.recipients],
                 applicant_name=c.applicant_name,
                 applicant_contact=c.applicant_contact,
+                applicant_role=c.applicant_role,
                 status=c.status,
             )
         )

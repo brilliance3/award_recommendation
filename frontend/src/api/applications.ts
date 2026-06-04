@@ -113,11 +113,74 @@ export const addRecipientByToken = (
 
 // 기관 대표 전용 검토·최종제출 관리
 export interface ManageRecipientItem {
+  id: string;
   recipient_name?: string;
   organization_name?: string;
   recipient_position_title?: string;
   merit_category?: string;
 }
+
+// 대표가 수정할 수 있는 대상자 공적사항(공적요지·추천사유 등)
+export interface ManageRecipientMerit {
+  merit_short_summary?: string;
+  recommendation_reason?: string;
+  merit_overview_1?: string;
+  merit_overview_2?: string;
+  merit_overview_3?: string;
+  merit_overview_4?: string;
+  full_merit_text?: string;
+  character_assessment?: string;
+  local_reputation?: string;
+}
+
+// 대표가 수정할 수 있는 대상자 기본정보
+export interface ManageRecipientBasic {
+  recipient_name?: string;
+  chinese_name?: string;
+  birth_date?: string;
+  gender?: string;
+  address?: string;
+  region?: string;
+  occupation?: string;
+  organization_name?: string;
+  recipient_position_title?: string;
+  external_title?: string;
+  rank_grade?: string;
+  merit_category?: string;
+  merit_period?: string;
+  note?: string;
+}
+
+// 대표 검토용 대상자 전체 상세(기본 + 공적사항)
+export interface ManageRecipientDetail extends ManageRecipientBasic {
+  id: string;
+  merit_content?: ManageRecipientMerit | null;
+}
+
+export const getManageRecipient = (manageToken: string, recipientId: string) =>
+  api
+    .get<ManageRecipientDetail>(
+      `/api/applications/manage/${manageToken}/recipients/${recipientId}`
+    )
+    .then(r => r.data);
+
+export const updateManageRecipient = (
+  manageToken: string,
+  recipientId: string,
+  basic: ManageRecipientBasic,
+  merit: ManageRecipientMerit
+) =>
+  api
+    .put<ManageRecipientDetail>(
+      `/api/applications/manage/${manageToken}/recipients/${recipientId}`,
+      { basic, merit }
+    )
+    .then(r => r.data);
+
+export const deleteManageRecipient = (manageToken: string, recipientId: string) =>
+  api
+    .delete(`/api/applications/manage/${manageToken}/recipients/${recipientId}`)
+    .then(r => r.data);
 
 export interface ManageCaseInfo {
   organization?: string;

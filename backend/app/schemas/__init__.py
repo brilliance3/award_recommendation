@@ -43,6 +43,7 @@ from .application import (
     ShareRecipientAddResponse,
     ManageCaseInfo,
     ManageRecipientItem,
+    ManageRecipientUpdate,
     ManageSubmitResponse,
 )
 
@@ -60,6 +61,7 @@ __all__ = [
     "ShareRecipientAddResponse",
     "ManageCaseInfo",
     "ManageRecipientItem",
+    "ManageRecipientUpdate",
     "ManageSubmitResponse",
     "ChecklistPublicInfo",
     "ChecklistRead",

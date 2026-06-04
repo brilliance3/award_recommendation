@@ -21,6 +21,16 @@ const STATUS_COLOR: Record<string, string> = {
   취소: "bg-red-100 text-red-700",
 };
 
+const isExternal = (r: CaseRow) => !!r.applicant_role;
+const isDone = (r: CaseRow) => (r.status || "") === "완료";
+
+/** 목록 행/카드 배경 — 완료=회색 음영(우선), 외부신청=강조(앰버). */
+function rowHighlight(r: CaseRow): string {
+  if (isDone(r)) return "bg-ink-100 text-ink-400";
+  if (isExternal(r)) return "bg-amber-50";
+  return "";
+}
+
 export default function AllCasesPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -269,7 +279,7 @@ export default function AllCasesPage() {
                 </tr>
               ) : (
                 filtered.map((r, idx) => (
-                  <tr key={r.id}>
+                  <tr key={r.id} className={rowHighlight(r)}>
                     <td className="text-center text-ink-500">{idx + 1}</td>
                     <td>
                       <StatusSelector row={r} onChange={onStatusChange} />
@@ -278,6 +288,14 @@ export default function AllCasesPage() {
                       <Link to={`/cases/${r.id}`} className="krds-link">
                         {r.title}
                       </Link>
+                      {isExternal(r) && (
+                        <span
+                          className="krds-badge bg-amber-100 text-amber-800 ml-1.5 align-middle whitespace-nowrap"
+                          title="외부에서 접수된 신청입니다."
+                        >
+                          외부신청
+                        </span>
+                      )}
                     </td>
                     <td>
                       {r.award_grade ? (
@@ -349,12 +367,26 @@ export default function AllCasesPage() {
           </li>
         ) : (
           filtered.map(r => (
-            <li key={r.id} className="krds-card krds-card-pad">
+            <li
+              key={r.id}
+              className={`krds-card krds-card-pad ${
+                isDone(r)
+                  ? "bg-ink-100 opacity-70"
+                  : isExternal(r)
+                  ? "bg-amber-50 border-amber-200"
+                  : ""
+              }`}
+            >
               <Link
                 to={`/cases/${r.id}`}
-                className="block text-base font-bold text-ink-900 hover:text-brand-700"
+                className="inline-flex items-center gap-1.5 text-base font-bold text-ink-900 hover:text-brand-700"
               >
                 {r.title}
+                {isExternal(r) && (
+                  <span className="krds-badge bg-amber-100 text-amber-800 whitespace-nowrap">
+                    외부신청
+                  </span>
+                )}
               </Link>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <StatusSelector row={r} onChange={onStatusChange} />

@@ -5,6 +5,8 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from .checklist import ChecklistSubmit
+from .merit_content import MeritContentUpdate
+from .recipient import RecipientDetail, RecipientUpdate
 
 
 class ApplicationMeritContent(BaseModel):
@@ -112,6 +114,7 @@ class ShareRecipientAddResponse(BaseModel):
 
 class ManageRecipientItem(BaseModel):
     """대표 검토 화면에 보이는 대상자 1명 요약(주소·생년월일 등 민감정보 제외)."""
+    id: Optional[str] = None  # 대표 수정/제외 호출용
     recipient_name: Optional[str] = None
     organization_name: Optional[str] = None
     recipient_position_title: Optional[str] = None
@@ -130,6 +133,12 @@ class ManageCaseInfo(BaseModel):
     recipients: List[ManageRecipientItem] = []
     share_protected: bool = False  # 공유 링크 자격 설정 여부
     share_username: str = ""  # 설정된 아이디(대표가 확인·전달용)
+
+
+class ManageRecipientUpdate(BaseModel):
+    """대표(중간관리자)가 관리 화면에서 대상자 1명 수정 — 기본정보 + 공적사항."""
+    basic: RecipientUpdate
+    merit: Optional[MeritContentUpdate] = None
 
 
 class ManageSubmitResponse(BaseModel):

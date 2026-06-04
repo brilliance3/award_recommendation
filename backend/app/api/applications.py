@@ -362,6 +362,7 @@ def get_manage_info(manage_token: str, db: Session = Depends(get_db)):
         recipient_count=len(case.recipients),
         recipients=[
             schemas.ManageRecipientItem(
+                id=r.id,
                 recipient_name=r.recipient_name,
                 organization_name=r.organization_name,
                 recipient_position_title=r.recipient_position_title,
@@ -432,3 +433,87 @@ def submit_manage(manage_token: str, db: Session = Depends(get_db)):
         submitted=True,
         recipient_count=len(case.recipients),
     )
+
+
+# --- 대표(중간관리자) 대상자 검토·수정 — 관리 토큰 기반, 최종 제출 전에만 ---
+def _manage_recipient_or_404(
+    db: Session, manage_token: str, recipient_id: str
+) -> "models.Recipient":
+    """관리 토큰의 신청 건에 속한 대상자 조회. 다른 건의 대상자면 404."""
+    case = get_case_by_manage_token_or_404(db, manage_token)
+    r = (
+        db.query(models.Recipient)
+        .filter(
+            models.Recipient.id == recipient_id,
+            models.Recipient.award_case_id == case.id,
+        )
+        .first()
+    )
+    if not r:
+        raise HTTPException(status_code=404, detail="대상자를 찾을 수 없습니다.")
+    return case, r
+
+
+@router.get(
+    "/api/applications/manage/{manage_token}/recipients/{recipient_id}",
+    response_model=schemas.RecipientDetail,
+)
+def get_manage_recipient(manage_token: str, recipient_id: str, db: Session = Depends(get_db)):
+    """대표가 검토용으로 대상자 1명의 전체 정보(기본+공적사항)를 조회."""
+    _, r = _manage_recipient_or_404(db, manage_token, recipient_id)
+    return schemas.RecipientDetail.model_validate(r)
+
+
+@router.put(
+    "/api/applications/manage/{manage_token}/recipients/{recipient_id}",
+    response_model=schemas.RecipientDetail,
+)
+def update_manage_recipient(
+    manage_token: str,
+    recipient_id: str,
+    payload: schemas.ManageRecipientUpdate,
+    db: Session = Depends(get_db),
+):
+    """대표가 대상자 1명의 기본정보+공적사항을 수정. 최종 제출 후에는 차단."""
+    from .merit_contents import _ensure_merit_content
+
+    case, r = _manage_recipient_or_404(db, manage_token, recipient_id)
+    if case.applicant_submitted:
+        raise HTTPException(
+            status_code=403, detail="최종 제출 후에는 수정할 수 없습니다. 담당자에게 문의해 주세요."
+        )
+    for k, v in payload.basic.model_dump(exclude_unset=True).items():
+        setattr(r, k, v)
+    if payload.merit is not None:
+        mc = _ensure_merit_content(r, db)
+        for k, v in payload.merit.model_dump(exclude_unset=True).items():
+            setattr(mc, k, v)
+    db.flush()
+    # 제목 자동 갱신(이름 변경 반영)
+    db.refresh(case)
+    case.title = build_case_title(
+        case.applicant_organization, [x.recipient_name for x in case.recipients]
+    )
+    db.commit()
+    db.refresh(r)
+    return schemas.RecipientDetail.model_validate(r)
+
+
+@router.delete("/api/applications/manage/{manage_token}/recipients/{recipient_id}")
+def delete_manage_recipient(
+    manage_token: str, recipient_id: str, db: Session = Depends(get_db)
+):
+    """대표가 잘못/중복 들어온 대상자를 제외. 최종 제출 후에는 차단."""
+    case, r = _manage_recipient_or_404(db, manage_token, recipient_id)
+    if case.applicant_submitted:
+        raise HTTPException(
+            status_code=403, detail="최종 제출 후에는 제외할 수 없습니다. 담당자에게 문의해 주세요."
+        )
+    db.delete(r)
+    db.flush()
+    db.refresh(case)
+    case.title = build_case_title(
+        case.applicant_organization, [x.recipient_name for x in case.recipients]
+    )
+    db.commit()
+    return {"ok": True, "recipient_count": len(case.recipients)}

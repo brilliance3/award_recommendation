@@ -35,6 +35,7 @@ export interface CaseRow {
   recipient_names: string[];
   applicant_name?: string;
   applicant_contact?: string;
+  applicant_role?: "individual" | "organization" | string; // 외부신청 식별(없으면 내부 수기)
   status?: string;
 }
 
