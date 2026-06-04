@@ -103,8 +103,15 @@ export interface ManageCreds {
   pw: string;
 }
 
+// HTTP 헤더는 ASCII만 안전 → 한글 등 비ASCII 자격을 base64(UTF-8)로 인코딩해 전송
+function b64utf8(s: string): string {
+  return btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+}
+
 const manageHeaders = (creds?: ManageCreds) =>
-  creds ? { "X-Manage-Id": creds.id, "X-Manage-Pw": creds.pw } : undefined;
+  creds
+    ? { "X-Manage-Id": b64utf8(creds.id), "X-Manage-Pw": b64utf8(creds.pw) }
+    : undefined;
 
 export interface ManageRecipientItem {
   id: string;

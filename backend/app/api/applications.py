@@ -2,6 +2,7 @@
 
 기관 대표 신청은 공유 토큰(share_token)을 발급해, 외부 피추천자가 그 링크로 본인 정보를
 한 명씩 직접 추가할 수 있다(공개 GET/POST by-token)."""
+import base64
 import secrets
 import uuid
 from datetime import datetime, timedelta
@@ -17,13 +18,24 @@ from .deps import get_case_by_share_token_or_404, get_case_by_manage_token_or_40
 router = APIRouter(tags=["applications"])
 
 
+def _decode_b64_header(request: Request, name: str) -> str:
+    """헤더는 base64(UTF-8)로 인코딩되어 옴(한글 등 비ASCII 안전 전송). 디코딩."""
+    raw = request.headers.get(name, "")
+    if not raw:
+        return ""
+    try:
+        return base64.b64decode(raw).decode("utf-8")
+    except Exception:
+        return ""
+
+
 def _manage_authorized(case: models.AwardCase, request: Request) -> bool:
     """관리 링크 자격 검사. 자격 미설정이면 항상 통과.
-    설정 시 요청 헤더 X-Manage-Id / X-Manage-Pw 가 일치해야 함(상수시간 비교)."""
+    설정 시 요청 헤더 X-Manage-Id / X-Manage-Pw(base64) 가 일치해야 함(상수시간 비교)."""
     if not case.manage_password:
         return True
-    uid = request.headers.get("x-manage-id", "")
-    pw = request.headers.get("x-manage-pw", "")
+    uid = _decode_b64_header(request, "x-manage-id")
+    pw = _decode_b64_header(request, "x-manage-pw")
     ok_u = secrets.compare_digest(uid.encode("utf-8"), (case.manage_username or "").encode("utf-8"))
     ok_p = secrets.compare_digest(pw.encode("utf-8"), case.manage_password.encode("utf-8"))
     return ok_u and ok_p
