@@ -208,7 +208,7 @@ export default function ApplicationFormPage() {
   const [applicantOrg, setApplicantOrg] = useState("");
   const [applicantContact, setApplicantContact] = useState("");
   const [applicantDeliveryAddress, setApplicantDeliveryAddress] = useState("");
-  // 기관 대표 신청 시 관리 링크 보호 자격(선택)
+  // 기관 신청자 신청 시 관리 링크 보호 자격(선택)
   const [manageUser, setManageUser] = useState("");
   const [managePw, setManagePw] = useState("");
   const [recommenderName, setRecommenderName] = useState("");
@@ -416,9 +416,9 @@ export default function ApplicationFormPage() {
     if (!applicantName.trim()) return "신청자 이름을 입력해 주세요.";
     if (applicantRole === "organization" && !applicantOrg.trim())
       return "기관 신청은 단체명이 필요합니다.";
-    // 기관 대표 신청은 연락처 필수
+    // 기관 신청자는 연락처 필수
     if (applicantRole === "organization" && !applicantContact.trim())
-      return "기관 대표 신청은 연락처(이메일 또는 전화번호)가 필요합니다.";
+      return "기관 신청자는 연락처(이메일 또는 전화번호)가 필요합니다.";
     // 희망 등기수령 주소는 개인·기관 공통 필수
     if (!applicantDeliveryAddress.trim())
       return "희망 등기수령 주소를 입력해 주세요.";
@@ -428,7 +428,7 @@ export default function ApplicationFormPage() {
       return "희망 표창일을 입력해 주세요.";
     if (awardDate < todayIso())
       return "희망 표창일은 오늘 이후의 날짜여야 합니다.";
-    // 개인 신청은 본인 1명 이상 필수. 기관 대표 신청은 0명도 허용(공유 URL로 대상자가 직접 추가).
+    // 개인 신청은 본인 1명 이상 필수. 기관 신청자는 0명도 허용(공유 URL로 대상자가 직접 추가).
     if (applicantRole === "individual" && recipients.length === 0)
       return "추천대상자를 1명 이상 추가해 주세요.";
     for (let i = 0; i < recipients.length; i++) {
@@ -475,7 +475,7 @@ export default function ApplicationFormPage() {
     try {
       const res = await submitApplication(payload);
       clearDraft(); // 제출 완료 → 임시저장 삭제
-      // 기관 대표 신청: 방금 설정한 자격을 들고 검토·제출 화면으로 바로 진입(재입력 없음)
+      // 기관 신청자 신청: 방금 설정한 자격을 들고 검토·제출 화면으로 바로 진입(재입력 없음)
       if (payload.applicant_role === "organization" && res.manage_token) {
         navigate(`/apply/manage/${res.manage_token}`, {
           state: { creds: { id: manageUser.trim() || "manage", pw: managePw } },
@@ -523,7 +523,7 @@ export default function ApplicationFormPage() {
               경기도의회 의장 표창 추천 신청
             </h1>
             <p className="krds-page-sub leading-relaxed">
-              본 양식은 추천대상자(또는 기관 대표자)가 직접 작성합니다. 입력하신
+              본 양식은 추천대상자(또는 기관 신청자)가 직접 작성합니다. 입력하신
               정보는 전문위원실에서 검토 후 공적심사에 제출됩니다.{" "}
               <strong className="text-danger-600">
                 허위 입력 시 표창이 취소될 수 있습니다.
@@ -592,7 +592,7 @@ export default function ApplicationFormPage() {
                 onChange={() => setApplicantRole("organization")}
               />
               <span className="text-sm">
-                기관 대표 신청 (단체에서 여러 명 추천)
+                기관 신청자 (단체에서 여러 명 추천)
               </span>
             </label>
           </div>
@@ -710,7 +710,7 @@ export default function ApplicationFormPage() {
           </Field>
         </section>
 
-        {/* 대상자 — 개인 신청은 직접 입력, 기관 대표는 공유 링크로 대상자가 각자 추가 */}
+        {/* 대상자 — 개인 신청은 직접 입력, 기관 신청자는 공유 링크로 대상자가 각자 추가 */}
         {applicantRole === "individual" ? (
         <section className="space-y-4">
           <div className="flex items-center justify-between">
@@ -790,7 +790,7 @@ export default function ApplicationFormPage() {
               3. 추천대상자
             </h2>
             <p className="text-sm text-ink-700 leading-relaxed">
-              기관 대표 신청은 대상자 정보를 직접 입력하지 않습니다. 아래{" "}
+              기관 신청자는 대상자 정보를 직접 입력하지 않습니다. 아래{" "}
               <strong>[공유 링크 발급]</strong>을 누르면 추천대상자용 링크가
               생성됩니다. 그 링크를 각 추천대상자에게 보내면, 대상자가 본인 정보를
               직접 입력해 이 신청 명단에 추가됩니다.

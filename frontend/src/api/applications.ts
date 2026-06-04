@@ -151,6 +151,20 @@ export interface ManageRecipientDetail extends ManageRecipientBasic {
   merit_content?: ManageRecipientMerit | null;
 }
 
+/** 대표(인증된 관리자)가 검토 화면에서 대상자 직접 추가 — 개인 신청 폼과 동일 payload */
+export const addManageRecipient = (
+  manageToken: string,
+  payload: ApplicationRecipient,
+  creds?: ManageCreds
+) =>
+  api
+    .post<ShareRecipientAddResponse>(
+      `/api/applications/manage/${manageToken}/recipients`,
+      payload,
+      { headers: manageHeaders(creds) }
+    )
+    .then(r => r.data);
+
 export const getManageRecipient = (
   manageToken: string,
   recipientId: string,

@@ -40,7 +40,7 @@ export default function RecipientListPage() {
   // 공유 링크 회수/재개
   const [savingShare, setSavingShare] = useState(false);
 
-  // 관리 링크 자격(아이디/비밀번호) — 담당자 조회·재설정 (대표가 잊으면 안내)
+  // 관리 링크 자격(아이디/비밀번호) — 담당자 조회·재설정 (신청자가 잊으면 안내)
   const [manageCred, setManageCred] = useState<ManageCredentials | null>(null);
   const [credUser, setCredUser] = useState("");
   const [credPw, setCredPw] = useState("");
@@ -66,7 +66,7 @@ export default function RecipientListPage() {
     try {
       const c = await setManageCredentials(caseId, credUser.trim(), credPw);
       setManageCred(c);
-      alert("관리 링크 자격을 재설정했습니다. 대표자에게 새 아이디·비밀번호를 알려주세요.");
+      alert("관리 링크 자격을 재설정했습니다. 신청자에게 새 아이디·비밀번호를 알려주세요.");
     } catch (err: any) {
       alert("재설정 실패: " + (err?.response?.data?.detail || err?.message || ""));
     } finally {
@@ -429,7 +429,7 @@ export default function RecipientListPage() {
                 {detail.applicant_name}
                 {detail.applicant_role === "organization" && (
                   <span className="ml-1 text-xs text-ink-500">
-                    (기관 대표)
+                    (기관 신청자)
                   </span>
                 )}
               </dd>
@@ -458,7 +458,7 @@ export default function RecipientListPage() {
         </div>
       )}
 
-      {/* 기관 대표 신청 — 대상자 자가추가 공유 링크 (보기·재복사·회수) */}
+      {/* 기관 신청자 신청 — 대상자 자가추가 공유 링크 (보기·재복사·회수) */}
       {detail.share_token && (
         <div className="krds-card krds-card-pad mb-4 border-blue-200 bg-blue-50/40">
           <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -540,7 +540,7 @@ export default function RecipientListPage() {
                   </span>
                 </div>
                 <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">
-                  기관 대표자가 잊었을 때 아래 값을 알려주거나, 새로 재설정해 전달하세요.
+                  기관 신청자자가 잊었을 때 아래 값을 알려주거나, 새로 재설정해 전달하세요.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                   <label className="block">

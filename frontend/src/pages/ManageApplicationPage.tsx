@@ -4,6 +4,7 @@ import {
   getManageInfo,
   submitManageApplication,
   changeManageCredentials,
+  addManageRecipient,
   getManageRecipient,
   updateManageRecipient,
   deleteManageRecipient,
@@ -12,12 +13,19 @@ import {
   type ManageRecipientBasic,
   type ManageRecipientMerit,
 } from "../api/applications";
+import {
+  RecipientCard,
+  emptyRecipient,
+  validateRecipient,
+  toApplicationRecipient,
+  type RecipientFormData,
+} from "./ApplicationFormPage";
 import Field, { Button, Input, TextArea } from "../components/Field";
 import PublicLayout from "../components/PublicLayout";
 import ShareLinkBox from "../components/ShareLinkBox";
 
-/** 기관 대표 전용(/apply/manage/:token) — 보호되는 관리 링크.
- *  대표가 모인 대상자를 검토·수정·제외하고 최종 제출한다. 관리 비밀번호가 설정돼 있으면
+/** 기관 신청자 전용(/apply/manage/:token) — 보호되는 관리 링크.
+ *  신청자가 모인 대상자를 검토·수정·제외하고 최종 제출한다. 관리 비밀번호가 설정돼 있으면
  *  아이디/비밀번호로 인증해야 접근할 수 있다(작성 대상자 추가 링크는 별도로 개방). */
 export default function ManageApplicationPage() {
   const { token = "" } = useParams();
@@ -40,9 +48,10 @@ export default function ManageApplicationPage() {
   const [credPw, setCredPw] = useState("");
   const [savingCred, setSavingCred] = useState(false);
 
-  // 대상자 검토·수정
+  // 대상자 검토·수정·추가
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   const load = (c?: ManageCreds | null) =>
     getManageInfo(token, c ?? undefined)
@@ -179,7 +188,7 @@ export default function ManageApplicationPage() {
             <div>
               <h1 className="krds-page-title">관리자 인증</h1>
               <p className="krds-page-sub leading-relaxed">
-                기관 대표 관리 화면입니다. 신청 시 설정한 아이디와 비밀번호를
+                기관 신청자 관리 화면입니다. 신청 시 설정한 아이디와 비밀번호를
                 입력해 주세요. 잊으신 경우 표창 담당 전문위원실에 문의하면
                 확인·재설정해 드립니다.
               </p>
@@ -250,7 +259,7 @@ export default function ManageApplicationPage() {
           </div>
         )}
 
-        {/* 작성자에게 줄 링크 — 대표가 각 대상자에게 배포(자격 없이 개방) */}
+        {/* 작성자에게 줄 링크 — 신청자가 각 대상자에게 배포(자격 없이 개방) */}
         {info.share_token && (
           <div className="krds-card krds-card-pad border-brand-200 bg-brand-50/40">
             <h2 className="text-sm font-bold text-ink-800">
@@ -265,10 +274,10 @@ export default function ManageApplicationPage() {
           </div>
         )}
 
-        {/* 관리 링크 주소 — 대표가 나중에 다시 들어올 때 필요 */}
+        {/* 신청자 링크 — 나중에 다시 들어올 때 필요 */}
         <div className="krds-card krds-card-pad">
           <h2 className="text-sm font-bold text-ink-800">
-            이 관리 화면 주소 (대표 보관용)
+            🔑 신청자 링크 — 이 검토·제출 화면 주소 (보관용)
           </h2>
           <p className="text-xs text-ink-600 mt-0.5 leading-relaxed">
             나중에 다시 검토·제출하러 들어올 때 필요합니다. 접속 시 설정한
@@ -327,13 +336,25 @@ export default function ManageApplicationPage() {
 
         {/* 모인 대상자 명단 */}
         <div className="krds-card krds-card-pad">
-          <h2 className="text-sm font-bold text-ink-800 mb-2">
-            추가된 추천대상자 ({info.recipient_count}명)
-          </h2>
-          {!info.submitted && info.recipient_count > 0 && (
+          <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+            <h2 className="text-sm font-bold text-ink-800">
+              3. 추천대상자 ({info.recipient_count}명)
+            </h2>
+            {!info.submitted && (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => setAdding(true)}
+              >
+                ＋ 대상자 추가
+              </Button>
+            )}
+          </div>
+          {!info.submitted && (
             <p className="text-xs text-ink-500 mb-2">
-              최종 제출 전까지 각 대상자의 정보를 검토·수정하거나 잘못 들어온
-              대상자를 제외할 수 있습니다.
+              신청자가 직접 <strong>대상자 추가</strong>하거나, 위 작성자 링크로 들어온
+              대상자를 검토·수정·제외할 수 있습니다. 최종 제출 전까지 가능합니다.
             </p>
           )}
           {info.recipients.length === 0 ? (
@@ -399,6 +420,18 @@ export default function ManageApplicationPage() {
           />
         )}
 
+        {adding && (
+          <RecipientAddModal
+            manageToken={token}
+            creds={creds}
+            onClose={() => setAdding(false)}
+            onAdded={async () => {
+              setAdding(false);
+              await load(creds);
+            }}
+          />
+        )}
+
         {!info.submitted && (
           <div className="flex justify-end">
             <Button
@@ -415,7 +448,89 @@ export default function ManageApplicationPage() {
   );
 }
 
-/** 대표 검토용 대상자 수정 모달 — 기본정보 + 공적사항. */
+/** 신청자가 대상자를 직접 추가하는 모달 — 개인 신청 폼과 동일한 입력(RecipientCard). */
+function RecipientAddModal({
+  manageToken,
+  creds,
+  onClose,
+  onAdded,
+}: {
+  manageToken: string;
+  creds: ManageCreds | null;
+  onClose: () => void;
+  onAdded: () => void;
+}) {
+  const [draft, setDraft] = useState<RecipientFormData>(() => emptyRecipient());
+  const [atLast, setAtLast] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onSubmit = async () => {
+    const err = validateRecipient(draft);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await addManageRecipient(
+        manageToken,
+        toApplicationRecipient(draft),
+        creds ?? undefined
+      );
+      onAdded();
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || e?.message || "추가에 실패했습니다.");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center overflow-y-auto p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl my-6">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-ink-200 sticky top-0 bg-white rounded-t-lg z-10">
+          <h3 className="text-base font-bold text-ink-900">추천대상자 추가</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-ink-500 hover:text-ink-800 text-xl leading-none"
+            aria-label="닫기"
+          >
+            ×
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-4">
+          {error && (
+            <p className="text-sm text-danger-700 bg-danger-50 border border-danger-200 rounded-md px-3 py-2">
+              {error}
+            </p>
+          )}
+          <RecipientCard
+            data={draft}
+            onChange={patch => setDraft(prev => ({ ...prev, ...patch }))}
+            onStepChange={s => setAtLast(s.isLast)}
+          />
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-3 border-t border-ink-200 sticky bottom-0 bg-white rounded-b-lg">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
+            취소
+          </Button>
+          <Button
+            type="button"
+            onClick={onSubmit}
+            disabled={saving || !atLast}
+            title={atLast ? "" : "마지막 단계까지 입력하면 추가할 수 있습니다."}
+          >
+            {saving ? "추가 중..." : "대상자 추가"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 신청자 검토용 대상자 수정 모달 — 기본정보 + 공적사항. */
 function RecipientEditModal({
   manageToken,
   recipientId,

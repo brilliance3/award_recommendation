@@ -15,7 +15,7 @@ import {
 import { Button } from "../components/Field";
 import PublicLayout from "../components/PublicLayout";
 
-/** 기관 대표가 발급한 공유 링크(/apply/add/:token) — 피추천자 본인이 자기 정보를 1명 추가.
+/** 기관 신청자가 발급한 공유 링크(/apply/add/:token) — 피추천자 본인이 자기 정보를 1명 추가.
  *  - 마지막 단계(부적격 체크리스트)에서만 제출 활성화
  *  - 토큰별 임시저장(localStorage)으로 작성 중 내용 보존·복원 */
 export default function AddRecipientPage() {
@@ -139,7 +139,7 @@ export default function AddRecipientPage() {
             </p>
             <p className="text-sm text-ink-700 leading-relaxed mt-3">
               문의사항이 있으시면 신청하신 기관
-              {info?.organization ? `(${info.organization})` : ""}의 대표자에게
+              {info?.organization ? `(${info.organization})` : ""}의 신청자에게
               문의해 주세요.
             </p>
           </div>

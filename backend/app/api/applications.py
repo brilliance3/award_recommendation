@@ -461,6 +461,48 @@ def _manage_recipient_or_404(
     return case, r
 
 
+@router.post(
+    "/api/applications/manage/{manage_token}/recipients",
+    response_model=schemas.ShareRecipientAddResponse,
+)
+def add_manage_recipient(
+    manage_token: str,
+    payload: schemas.ApplicationRecipient,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """대표(인증된 관리자)가 검토 화면에서 대상자를 직접 추가 — 개인 신청 폼과 동일.
+    작성자 자가추가(by-token)와 달리 본인확인은 생략(이미 인증된 관리자). 최종 제출 후 차단."""
+    case = get_case_by_manage_token_or_404(db, manage_token)
+    if not _manage_authorized(case, request):
+        raise HTTPException(status_code=401, detail="관리 자격이 필요합니다.")
+    if case.applicant_submitted:
+        raise HTTPException(
+            status_code=403, detail="최종 제출 후에는 추가할 수 없습니다. 담당자에게 문의해 주세요."
+        )
+    # 중복(성명+생년월일) 차단
+    for r in case.recipients:
+        if (r.recipient_name or "").strip() == (payload.recipient_name or "").strip() and r.birth_date == payload.birth_date:
+            raise HTTPException(status_code=409, detail="이미 추가된 대상자입니다(동일 성명·생년월일).")
+    if len(case.recipients) >= SHARE_MAX_RECIPIENTS:
+        raise HTTPException(status_code=400, detail="추가 가능한 인원을 초과했습니다.")
+    client_host = request.client.host if request.client else ""
+    submitter_ip = (request.headers.get("x-forwarded-for") or client_host)[:64]
+    now = datetime.utcnow()
+    idx = len(case.recipients) + 1
+    rid = _create_recipient_from_payload(db, case, payload, idx, submitter_ip, now)
+    db.flush()
+    db.refresh(case)
+    case.title = build_case_title(
+        case.applicant_organization, [r.recipient_name for r in case.recipients]
+    )
+    db.commit()
+    db.refresh(case)
+    return schemas.ShareRecipientAddResponse(
+        recipient_id=rid, recipient_count=len(case.recipients)
+    )
+
+
 @router.get(
     "/api/applications/manage/{manage_token}/recipients/{recipient_id}",
     response_model=schemas.RecipientDetail,
