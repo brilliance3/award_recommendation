@@ -24,6 +24,19 @@ export interface Legislator {
   sort_order: number;
 }
 
+export interface SiteCredentials {
+  username: string;
+  has_password: boolean;
+}
+
+export const getSiteCredentials = () =>
+  api.get<SiteCredentials>("/api/settings/site-credentials").then(r => r.data);
+
+export const updateSiteCredentials = (username: string, password: string) =>
+  api
+    .put<SiteCredentials>("/api/settings/site-credentials", { username, password })
+    .then(r => r.data);
+
 export const getSettings = () =>
   api.get<AppSetting>("/api/settings").then(r => r.data);
 

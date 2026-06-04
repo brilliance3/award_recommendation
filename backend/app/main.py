@@ -1,4 +1,6 @@
 """FastAPI 앱 엔트리포인트"""
+import base64
+import binascii
 import logging
 import re
 import traceback
@@ -6,7 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .api import (
@@ -19,6 +21,7 @@ from .api import (
     recipients,
     settings,
 )
+from . import auth
 from .config import ALLOWED_ORIGINS
 from .database import init_db
 
@@ -76,9 +79,35 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.middleware("http")
+    async def _basic_auth(request: Request, call_next):
+        """외부 노출 차단 — HTTP Basic 인증. 자격은 auth 모듈(DB 우선·env 폴백)에서 가져온다.
+        헬스체크(/api/health)와 CORS 프리플라이트(OPTIONS)는 통과."""
+        if not auth.is_enabled():
+            return await call_next(request)
+        if request.method == "OPTIONS" or request.url.path == "/api/health":
+            return await call_next(request)
+
+        unauthorized = Response(
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="award", charset="UTF-8"'},
+        )
+        header = request.headers.get("authorization", "")
+        if not header.startswith("Basic "):
+            return unauthorized
+        try:
+            decoded = base64.b64decode(header[6:]).decode("utf-8")
+            user, _, pw = decoded.partition(":")
+        except (binascii.Error, UnicodeDecodeError):
+            return unauthorized
+        if not auth.verify(user, pw):
+            return unauthorized
+        return await call_next(request)
+
     @app.on_event("startup")
     def _startup() -> None:
         init_db()
+        auth.load_from_db()
 
     @app.exception_handler(Exception)
     async def _all_exception_handler(request: Request, exc: Exception):

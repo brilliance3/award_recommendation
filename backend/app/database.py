@@ -117,6 +117,8 @@ def _apply_lightweight_migrations() -> None:
         ("award_cases", "applicant_submitted", "BOOLEAN DEFAULT 1 NOT NULL"),
         ("award_cases", "deleted_at", "DATETIME"),
         ("app_settings", "department_name", "VARCHAR(255) DEFAULT '보건복지전문위원실'"),
+        ("app_settings", "site_username", "VARCHAR(100)"),
+        ("app_settings", "site_password", "VARCHAR(255)"),
     ]
     with engine.begin() as conn:
         for table, column, ddl in additions:

@@ -40,6 +40,11 @@ DEFAULT_INVESTIGATOR = {
 
 DEFAULT_RECOMMENDER_AGENCY = os.getenv("RECOMMENDER_AGENCY", "경기도의회")
 
+# 사이트 접근 비밀번호 (HTTP Basic 인증) - 외부 노출 차단용.
+# SITE_PASSWORD 가 비어 있으면 인증 비활성화(로컬 개발 기본값).
+SITE_USERNAME = os.getenv("SITE_USERNAME", "ggcit")
+SITE_PASSWORD = os.getenv("SITE_PASSWORD", "")
+
 # CORS - 콤마 구분, "*" 면 모두 허용
 _origins_raw = os.getenv(
     "ALLOWED_ORIGINS",

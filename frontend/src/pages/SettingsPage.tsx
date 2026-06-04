@@ -10,8 +10,10 @@ import {
   deleteLegislator,
   uploadLegislatorSeal,
   sealUrl,
+  getSiteCredentials,
+  updateSiteCredentials,
 } from "../api";
-import type { AppSetting, Legislator } from "../api/settings";
+import type { AppSetting, Legislator, SiteCredentials } from "../api/settings";
 import { absoluteUrl } from "../api/client";
 import Field, { Input, Button } from "../components/Field";
 
@@ -22,14 +24,56 @@ export default function SettingsPage() {
   const [savingSetting, setSavingSetting] = useState(false);
   const [bust, setBust] = useState(Date.now()); // 도장 이미지 캐시 무력화
 
+  // 로그인 계정(사이트 접근 자격)
+  const [cred, setCred] = useState<SiteCredentials | null>(null);
+  const [credUser, setCredUser] = useState("");
+  const [credPw, setCredPw] = useState("");
+  const [credPw2, setCredPw2] = useState("");
+  const [savingCred, setSavingCred] = useState(false);
+
   const load = async () => {
     setLoading(true);
     try {
-      const [s, ls] = await Promise.all([getSettings(), listLegislators()]);
+      const [s, ls, cr] = await Promise.all([
+        getSettings(),
+        listLegislators(),
+        getSiteCredentials(),
+      ]);
       setSetting(s);
       setLegislators(ls);
+      setCred(cr);
+      setCredUser(cr.username);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const onSaveCred = async () => {
+    if (!credUser.trim()) {
+      alert("아이디를 입력하세요.");
+      return;
+    }
+    if (credPw.length < 4) {
+      alert("비밀번호는 4자 이상이어야 합니다.");
+      return;
+    }
+    if (credPw !== credPw2) {
+      alert("새 비밀번호가 일치하지 않습니다.");
+      return;
+    }
+    setSavingCred(true);
+    try {
+      const updated = await updateSiteCredentials(credUser.trim(), credPw);
+      setCred(updated);
+      setCredPw("");
+      setCredPw2("");
+      alert(
+        "로그인 계정을 변경했습니다.\n\n다음 접속부터 새 아이디/비밀번호가 필요합니다. 브라우저가 다시 로그인을 요청할 수 있습니다."
+      );
+    } catch (e: any) {
+      alert("변경 실패: " + (e?.response?.data?.detail || e?.message || ""));
+    } finally {
+      setSavingCred(false);
     }
   };
 
@@ -224,6 +268,54 @@ export default function SettingsPage() {
         <div className="flex justify-end pt-2 border-t border-ink-100">
           <Button onClick={onSaveSetting} disabled={savingSetting}>
             설정 저장
+          </Button>
+        </div>
+      </section>
+
+      {/* B. 로그인 계정 (사이트 접근 자격) */}
+      <section className="krds-card krds-card-pad space-y-4">
+        <div>
+          <h2 className="krds-section-title">로그인 계정 (사이트 접근)</h2>
+          <p className="text-xs text-ink-500 mt-1">
+            외부에서 사이트를 볼 수 없도록 접속 시 요구하는 아이디·비밀번호입니다.
+            {cred && !cred.has_password && (
+              <strong className="text-danger-700">
+                {" "}현재 비밀번호가 설정되어 있지 않습니다.
+              </strong>
+            )}
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label="아이디">
+            <Input
+              value={credUser}
+              onChange={e => setCredUser(e.target.value)}
+              autoComplete="username"
+            />
+          </Field>
+          <div className="hidden sm:block" />
+          <Field label="새 비밀번호" hint="4자 이상">
+            <Input
+              type="password"
+              value={credPw}
+              onChange={e => setCredPw(e.target.value)}
+              autoComplete="new-password"
+              placeholder="변경할 비밀번호 입력"
+            />
+          </Field>
+          <Field label="새 비밀번호 확인">
+            <Input
+              type="password"
+              value={credPw2}
+              onChange={e => setCredPw2(e.target.value)}
+              autoComplete="new-password"
+              placeholder="한 번 더 입력"
+            />
+          </Field>
+        </div>
+        <div className="flex justify-end pt-2 border-t border-ink-100">
+          <Button onClick={onSaveCred} disabled={savingCred}>
+            로그인 계정 변경
           </Button>
         </div>
       </section>

@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import auth, models
 from ..config import SEAL_DIR
 from ..database import get_db
 
@@ -169,6 +169,42 @@ def upload_investigator_seal(file: UploadFile = File(...), db: Session = Depends
     db.commit()
     db.refresh(s)
     return s
+
+
+# ---------- 사이트 접근 자격 (로그인 ID/PW) ----------
+class SiteCredentialsRead(BaseModel):
+    username: str
+    has_password: bool
+
+
+class SiteCredentialsUpdate(BaseModel):
+    username: str
+    password: str
+
+
+@router.get("/api/settings/site-credentials", response_model=SiteCredentialsRead)
+def get_site_credentials():
+    """현재 로그인 아이디와 비밀번호 설정 여부 (비밀번호 값은 노출하지 않음)."""
+    return SiteCredentialsRead(
+        username=auth.current_username(), has_password=auth.is_enabled()
+    )
+
+
+@router.put("/api/settings/site-credentials", response_model=SiteCredentialsRead)
+def update_site_credentials(payload: SiteCredentialsUpdate, db: Session = Depends(get_db)):
+    """로그인 아이디/비밀번호 변경. DB 저장 + 인메모리 캐시 즉시 갱신."""
+    username = payload.username.strip()
+    password = payload.password
+    if not username:
+        raise HTTPException(status_code=400, detail="아이디를 입력하세요")
+    if len(password) < 4:
+        raise HTTPException(status_code=400, detail="비밀번호는 4자 이상이어야 합니다")
+    s = _get_or_create_setting(db)
+    s.site_username = username
+    s.site_password = password
+    db.commit()
+    auth.set_cache(username, password)
+    return SiteCredentialsRead(username=username, has_password=True)
 
 
 # ---------- 의원 명단 ----------

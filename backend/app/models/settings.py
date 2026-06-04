@@ -38,6 +38,10 @@ class AppSetting(Base):
     investigator_rank = Column(String(100), default="지방서기관")
     investigator_name = Column(String(100), default="")
     investigator_seal_filename = Column(String(255))
+    # 사이트 접근 자격(HTTP Basic). 설정 시 환경변수(SITE_*)보다 우선, 비어 있으면 폴백.
+    # 평문 저장 — 외부 노출 차단용 접근 게이트이며 기존 평문 설정값과 동일 보안 수준.
+    site_username = Column(String(100))
+    site_password = Column(String(255))
 
 
 class Legislator(Base):
