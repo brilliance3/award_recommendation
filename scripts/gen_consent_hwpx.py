@@ -18,7 +18,9 @@ SKILL = "/Users/jun/.claude/skills/hwpxskill"
 HEADER = "/tmp/refkr_header.xml"
 # secPr 은 base 템플릿(균형 보장)에서 가져오고 스타일만 refkr 헤더 사용
 REF_SECTION = f"{SKILL}/templates/base/Contents/section0.xml"
-OUT = "개인정보_활용동의서.hwpx"
+# ⚠️ 확정본은 개인정보_활용동의서.hwpx (한글에서 직접 정리·확정, repo에 -f 커밋됨).
+#    재생성은 초안용 별도 파일로 출력해 확정본을 덮어쓰지 않는다.
+OUT = "개인정보_활용동의서_초안생성.hwpx"
 
 # 기관 양식에서 추출한 스타일 ID
 C_TITLE, P_TITLE = 43, 44       # 제목
