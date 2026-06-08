@@ -1,148 +1,116 @@
-"""개인정보 수집·이용 및 제공 동의서 생성 + 자필 서명 합성.
+"""개인정보 수집·이용 및 제공 동의서 생성 (HWPX 아님 — HTML→PDF).
 
-흐름:
-1. 동의서_template.hwpx 의 section0.xml 텍스트를 채운다(성명·날짜·동의함 체크).
-2. soffice 로 PDF 변환.
-3. pdf_seal 과 동일한 방식으로 '대상자 성명' 줄의 빈칸에 서명 PNG 를 오버레이.
+요구사항(2026-06-09 사용자):
+- 표 셀 글자 잘림 없음(HTML 표 자동 높이) · 공적조서와 동일한 경기천년체
+- 단어 단위 줄바꿈(word-break: keep-all) · 무조건 1페이지
+- '동의함'에만 체크(CSS로 그린 체크박스 — 폰트 글리프 의존 제거)
+- 자필 서명을 '(서명 또는 인)' 위에 겹쳐서, 더 진하고 선명하게 표시
 
-서명 원본 PNG 는 storage/signatures/<recipient_id>.png (신청 시 저장됨).
+엔진은 공적조서와 동일(playwright/weasyprint). 로컬 chromium으로 렌더 검증 가능.
 """
 from __future__ import annotations
 
+import base64
 import io
-import zipfile
 from datetime import datetime
 from pathlib import Path
 
-import pdfplumber
-from PIL import Image
-from pypdf import PdfReader, PdfWriter
-from reportlab.lib.utils import ImageReader
-from reportlab.pdfgen import canvas
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from PIL import Image, ImageFilter
 
-from ..config import GENERATED_DIR, SIGNATURE_DIR, TEMPLATE_DIR
+from ..config import GENERATED_DIR, PDF_ENGINE, TEMPLATE_DIR
 from ..models import Recipient
-from . import pdf_preview
+from .pdf_generator import (
+    PDFEngineUnavailable,
+    _preview_font_face_css,
+    _render_with_playwright,
+    _render_with_weasyprint,
+)
 
-CONSENT_TEMPLATE = TEMPLATE_DIR / "동의서_template.hwpx"
-
-
-def _fill_section(xml: str, name: str, when: datetime) -> str:
-    """동의서 본문 텍스트 채우기 — 단일 run 문자열을 직접 치환."""
-    # 두 항목 모두 '동의함'에 체크(수집·이용 / 제3자 제공)
-    xml = xml.replace("동의함 ☐", "동의함 ☑")
-    # 날짜 — "20          년          월          일" → 실제 동의일
-    xml = xml.replace(
-        "20          년          월          일",
-        f"{when.year}년    {when.month}월    {when.day}일",
-    )
-    # 대상자 성명 — 빈칸 앞에 인쇄(서명 이미지는 PDF 단계에서 그 뒤 빈칸에 합성)
-    xml = xml.replace("대상자 성명 :", f"대상자 성명 :  {name}", 1)
-    return xml
-
-
-def generate_consent_hwpx(recipient: Recipient, when: datetime | None = None) -> Path:
-    """동의서 HWPX 생성(성명·날짜·동의 체크 반영). 경로 반환."""
-    when = when or recipient.signed_at or datetime.now()
-    with zipfile.ZipFile(CONSENT_TEMPLATE, "r") as z:
-        section = z.read("Contents/section0.xml").decode("utf-8")
-    section = _fill_section(section, recipient.recipient_name or "", when)
-
-    out_path = GENERATED_DIR / f"개인정보동의서_{recipient.id}.hwpx"
-    with zipfile.ZipFile(CONSENT_TEMPLATE, "r") as zin:
-        with zipfile.ZipFile(out_path, "w") as zout:
-            for item in zin.infolist():
-                data = zin.read(item.filename)
-                if item.filename == "Contents/section0.xml":
-                    data = section.encode("utf-8")
-                if item.filename == "mimetype":
-                    zout.writestr(item, data, compress_type=zipfile.ZIP_STORED)
-                else:
-                    zout.writestr(item, data, compress_type=zipfile.ZIP_DEFLATED)
-    return out_path
+_env = Environment(
+    loader=FileSystemLoader(str(TEMPLATE_DIR)),
+    autoescape=select_autoescape(["html", "xml"]),
+)
 
 
 def _signature_path(recipient: Recipient) -> Path | None:
-    """저장된 서명 PNG 경로 — 컬럼값 우선, 없으면 규칙 경로로 폴백."""
+    from ..config import SIGNATURE_DIR
+
     if recipient.signature_path and Path(recipient.signature_path).exists():
         return Path(recipient.signature_path)
     p = SIGNATURE_DIR / f"{recipient.id}.png"
     return p if p.exists() else None
 
 
-def _overlay_signature(input_pdf: Path, output_pdf: Path, sig_png: Path) -> Path:
-    """'대상자 성명' 줄의 인쇄 성명과 '(서명 또는 인)' 사이 빈칸에 서명 이미지를 그린다."""
-    sig_img = Image.open(sig_png).convert("RGBA")
-    sig_w, sig_h = sig_img.size
-    aspect = sig_w / sig_h if sig_h else 3.0
-    sig_buf = io.BytesIO()
-    sig_img.save(sig_buf, format="PNG")
-    sig_buf.seek(0)
+def _signature_data_url(png_path: Path) -> str:
+    """서명 PNG을 더 진하고 선명하게 보정 → base64 data URL.
 
-    overlay_buf = io.BytesIO()
-    c = canvas.Canvas(overlay_buf)
-    with pdfplumber.open(input_pdf) as pdf:
-        for page in pdf.pages:
-            c.setPageSize((page.width, page.height))
-            words = page.extract_words(use_text_flow=True)
-            # '(서명' 이 있는 줄 = 서명란. 그 중 '대상자' 가 같은 줄에 있는 첫 줄만 사용.
-            target = None
-            for w in words:
-                if not w["text"].startswith("(서명"):
-                    continue
-                line = [ww for ww in words if abs(ww["top"] - w["top"]) < 5]
-                if any("대상자" in ww["text"] for ww in line):
-                    target = (w, line)
-                    break
-            if target:
-                sign_word, line = target
-                # 왼쪽 경계 = 줄에서 '(서명' 직전 단어의 오른쪽 끝(인쇄된 성명 뒤)
-                lefts = [ww["x1"] for ww in line if ww["x1"] <= sign_word["x0"]]
-                left = max(lefts) if lefts else sign_word["x0"] - 140
-                right = sign_word["x0"]
-                top, bottom = sign_word["top"], sign_word["bottom"]
-                line_h = bottom - top
-                gap = max(right - left - 6, 30)
-                # 서명 높이는 줄 높이의 약 2.6배, 폭은 비율 유지하되 빈칸을 넘지 않음
-                h = line_h * 2.6
-                w_img = min(h * aspect, gap)
-                h = w_img / aspect if aspect else h
-                x = left + 4
-                y_bottom = page.height - bottom - (h - line_h) / 2
-                c.drawImage(
-                    ImageReader(sig_buf),
-                    x,
-                    y_bottom,
-                    width=w_img,
-                    height=h,
-                    mask="auto",
-                    preserveAspectRatio=True,
-                )
-                sig_buf.seek(0)
-            c.showPage()
-    c.save()
-    overlay_buf.seek(0)
+    - 비어 있지 않은 획은 순수 검정으로 + 알파를 키워 진하게
+    - MaxFilter로 살짝 두껍게(선명/진하게)
+    """
+    img = Image.open(png_path).convert("RGBA")
+    r, g, b, a = img.split()
+    # 알파(획) 두껍게 — 펜 굵기 보강
+    a = a.filter(ImageFilter.MaxFilter(3))
+    # 반투명 획도 진하게: 일정 이상은 불투명 처리
+    a = a.point(lambda v: 255 if v > 40 else int(v * 1.8))
+    black = Image.new("L", img.size, 0)
+    out = Image.merge("RGBA", (black, black, black, a))
+    buf = io.BytesIO()
+    out.save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
-    src = PdfReader(input_pdf)
-    overlay = PdfReader(overlay_buf)
-    writer = PdfWriter()
-    for i, page in enumerate(src.pages):
-        if i < len(overlay.pages):
-            page.merge_page(overlay.pages[i])
-        writer.add_page(page)
-    with open(output_pdf, "wb") as f:
-        writer.write(f)
-    return output_pdf
+
+def _department_name(recipient: Recipient) -> str:
+    """동의서 머리말·수신처 부서명 — AppSetting.department_name, 기본 보건복지전문위원실."""
+    try:
+        from ..database import SessionLocal
+        from .. import models
+
+        db = SessionLocal()
+        try:
+            s = db.query(models.AppSetting).first()
+            return (s.department_name if s and s.department_name else None) or "보건복지전문위원실"
+        finally:
+            db.close()
+    except Exception:
+        return "보건복지전문위원실"
+
+
+def render_consent_html(recipient: Recipient, when: datetime | None = None) -> str:
+    when = when or recipient.signed_at or datetime.now()
+    sig_path = _signature_path(recipient)
+    signature = _signature_data_url(sig_path) if sig_path else None
+    template = _env.get_template("consent.html")
+    return template.render(
+        name=recipient.recipient_name or "",
+        dept=_department_name(recipient),
+        year=when.year,
+        month=when.month,
+        day=when.day,
+        signature=signature,
+        font_css=_preview_font_face_css(),
+    )
 
 
 def generate_consent_pdf(recipient: Recipient, when: datetime | None = None) -> Path:
-    """동의서 PDF 생성 — 본문 채움 + 자필 서명 합성(서명 있을 때만)."""
-    hwpx = generate_consent_hwpx(recipient, when)
-    base_pdf = pdf_preview.convert_to_pdf(hwpx)
-    sig_png = _signature_path(recipient)
+    """동의서 PDF 생성(HTML→PDF). 경로 반환."""
+    html = render_consent_html(recipient, when)
     out_pdf = GENERATED_DIR / f"개인정보동의서_{recipient.id}.pdf"
-    if sig_png:
-        return _overlay_signature(base_pdf, out_pdf, sig_png)
-    # 서명 없으면 변환본 그대로 저장 위치로 복사
-    out_pdf.write_bytes(Path(base_pdf).read_bytes())
-    return out_pdf
+
+    preferred = PDF_ENGINE.lower()
+    order = ["playwright", "weasyprint"] if preferred == "playwright" else ["weasyprint", "playwright"]
+    errors = []
+    for engine in order:
+        try:
+            if engine == "playwright":
+                _render_with_playwright(html, out_pdf)
+            else:
+                _render_with_weasyprint(html, out_pdf)
+            return out_pdf
+        except PDFEngineUnavailable as e:
+            errors.append(f"{engine}: {e}")
+            continue
+        except Exception as e:
+            raise RuntimeError(f"[{engine}] 동의서 PDF 렌더링 실패: {e}") from e
+    raise PDFEngineUnavailable("사용 가능한 PDF 엔진이 없습니다.\n - " + "\n - ".join(errors))
