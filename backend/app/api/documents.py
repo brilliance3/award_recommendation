@@ -12,6 +12,7 @@ from .. import models, schemas
 from ..config import GENERATED_DIR, SEAL_DIR, UPLOAD_DIR
 from ..database import get_db
 from ..services import (
+    consent_generator,
     hwpx_generator,
     pdf_generator,
     pdf_preview,
@@ -62,6 +63,28 @@ def generate_pdf(recipient_id: str, db: Session = Depends(get_db)):
         files=[
             schemas.GeneratedFileInfo(
                 type="merit_report",
+                file_name=path.name,
+                download_url=_download_url(path.name),
+            )
+        ]
+    )
+
+
+@router.post(
+    "/api/recipients/{recipient_id}/generate-consent-pdf",
+    response_model=schemas.GenerateDocumentResponse,
+)
+def generate_consent_pdf(recipient_id: str, db: Session = Depends(get_db)):
+    """개인정보 동의서 PDF 생성 — 성명·날짜·동의 체크 채움 + 자필 서명 합성."""
+    r = get_recipient_or_404(db, recipient_id)
+    if not r.award_case:
+        raise HTTPException(status_code=400, detail="표창 건 정보가 없습니다")
+    path = consent_generator.generate_consent_pdf(r)
+    _register_document(db, r.award_case_id, r.id, "consent_pdf", path)
+    return schemas.GenerateDocumentResponse(
+        files=[
+            schemas.GeneratedFileInfo(
+                type="consent_pdf",
                 file_name=path.name,
                 download_url=_download_url(path.name),
             )

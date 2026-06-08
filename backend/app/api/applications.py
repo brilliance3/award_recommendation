@@ -46,6 +46,24 @@ SHARE_TOKEN_TTL_DAYS = 30
 # 개인정보 동의 문안 버전 — 문안 변경 시 갱신(사후 증빙용)
 CONSENT_VERSION = "2026-06-04"
 
+# 표창 취소·회수 동의 문안 버전 — 근거: 「경기도의회 표창 등에 관한 조례」 제17조(표창취소)
+REVOCATION_CONSENT_VERSION = "2026-06-09"
+
+
+def _save_signature_png(recipient_id: str, data_url: str) -> str:
+    """서명 PNG(data URL)를 storage/signatures/<recipient_id>.png 로 저장하고 절대경로 반환.
+
+    data_url 예: "data:image/png;base64,iVBOR...". 형식이 아니면 그대로 base64로 간주."""
+    from ..config import SIGNATURE_DIR
+
+    raw = data_url.strip()
+    if "," in raw and raw.lower().startswith("data:"):
+        raw = raw.split(",", 1)[1]
+    img_bytes = base64.b64decode(raw)
+    path = SIGNATURE_DIR / f"{recipient_id}.png"
+    path.write_bytes(img_bytes)
+    return str(path)
+
 # 짧은 코드 알파벳 — 혼동 문자(O,0,I,1,L) 제외
 _CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
@@ -98,6 +116,11 @@ def _create_recipient_from_payload(
             status_code=400,
             detail="개인정보 수집·이용 및 제공 활용 동의(필수)가 필요합니다.",
         )
+    if not r_payload.revocation_consent:
+        raise HTTPException(
+            status_code=400,
+            detail="표창 취소·회수 동의(필수, 조례 제17조)가 필요합니다.",
+        )
     recipient = models.Recipient(
         award_case_id=case.id,
         sequence_no=idx,
@@ -121,9 +144,21 @@ def _create_recipient_from_payload(
         consent_at=now,
         consent_version=CONSENT_VERSION,
         consent_path=consent_path,
+        # 표창 취소·회수 동의 로깅(조례 제17조)
+        revocation_consent_at=now,
+        revocation_consent_version=REVOCATION_CONSENT_VERSION,
     )
     db.add(recipient)
     db.flush()
+
+    # 자필 서명 PNG 저장(있을 때만) — recipient.id 확정 후
+    if r_payload.signature:
+        try:
+            recipient.signature_path = _save_signature_png(recipient.id, r_payload.signature)
+            recipient.signed_at = now
+        except Exception:
+            # 서명 디코딩/저장 실패는 신청 자체를 막지 않음(동의 로깅은 유지)
+            pass
 
     cl_payload = r_payload.checklist
     checklist = models.Checklist(

@@ -40,6 +40,8 @@ export interface ApplicationRecipient {
   careers?: ApplicationCareerRecord[];
   previous_awards?: ApplicationPreviousAward[];
   consent?: boolean; // 개인정보 수집·이용 및 제공 활용 동의(필수)
+  revocation_consent?: boolean; // 표창 취소·회수 동의(필수, 조례 제17조)
+  signature?: string; // 자필 서명 PNG data URL
 }
 
 export interface ApplicationSubmit {

@@ -52,6 +52,8 @@ class ApplicationRecipient(BaseModel):
     careers: List[ApplicationCareerRecord] = Field(default_factory=list)
     previous_awards: List[ApplicationPreviousAward] = Field(default_factory=list)
     consent: bool = False  # 개인정보 수집·이용 및 제공 활용 동의(필수)
+    revocation_consent: bool = False  # 표창 취소·회수 동의(필수, 조례 제17조)
+    signature: Optional[str] = None  # 자필 서명 PNG data URL (data:image/png;base64,...)
 
 
 class ApplicationSubmit(BaseModel):

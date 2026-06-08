@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   generateChecklistHwpx,
+  generateConsentPdf,
   generateOverviewHwpx,
   generateRecipientListXlsx,
   generateReportHwpx,
@@ -35,6 +36,20 @@ export default function DownloadPage() {
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false); // 도장찍기 드래그앤드롭 하이라이트
   const [quotaWarned, setQuotaWarned] = useState(false);
+  const [consentBusyId, setConsentBusyId] = useState<string | null>(null); // 동의서 생성 중인 대상자
+
+  // 개인정보 동의서(서명본) PDF 생성 → 즉시 다운로드
+  const downloadConsent = async (recipientId: string) => {
+    setConsentBusyId(recipientId);
+    try {
+      const res = await generateConsentPdf(recipientId);
+      res.files.forEach(triggerDownload);
+    } catch {
+      alert("동의서 PDF 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setConsentBusyId(null);
+    }
+  };
 
   const refresh = async () => {
     const d = await getCase(caseId);
@@ -379,6 +394,41 @@ export default function DownloadPage() {
             </Button>
           </div>
         </div>
+
+        {detail && detail.recipients.length > 0 && (
+          <div>
+            <h2 className="krds-section-title mb-1">개인정보 동의서 (자필 서명본)</h2>
+            <p className="text-xs text-ink-500 mb-3">
+              대상자별 동의서 PDF입니다. 신청 시 입력한 자필 서명이 서명란에 합성됩니다.
+              (서명 없이 제출된 건은 서명란이 비어 있습니다.)
+            </p>
+            <ul className="divide-y divide-ink-100 rounded-lg border border-ink-200 overflow-hidden">
+              {detail.recipients.map(r => (
+                <li
+                  key={r.id}
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-3 sm:px-4 py-3 bg-white"
+                >
+                  <span className="text-sm text-ink-800">
+                    {r.recipient_name}
+                    {r.signed_at ? (
+                      <span className="ml-2 text-xs text-success-700">✓ 서명 있음</span>
+                    ) : (
+                      <span className="ml-2 text-xs text-ink-400">서명 없음</span>
+                    )}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    onClick={() => downloadConsent(r.id)}
+                    disabled={consentBusyId === r.id}
+                    className="self-start sm:self-auto"
+                  >
+                    {consentBusyId === r.id ? "생성 중…" : "동의서 PDF ↓"}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {files.length > 0 && (
           <div>

@@ -69,6 +69,10 @@ class RecipientRead(RecipientBase):
     consent_at: Optional[datetime] = None
     consent_version: Optional[str] = None
     consent_path: Optional[str] = None
+    # 표창 취소·회수 동의 + 자필 서명 로깅
+    revocation_consent_at: Optional[datetime] = None
+    revocation_consent_version: Optional[str] = None
+    signed_at: Optional[datetime] = None
 
 
 class RecipientDetail(RecipientRead):

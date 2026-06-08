@@ -57,6 +57,7 @@ export interface Recipient {
   award_date?: string; // 표창일(대상자 개인 단위, YYYY-MM-DD)
   note?: string;
   admin_reviewed?: boolean; // 관리자 검토(공직선거법) 완료 여부
+  signed_at?: string; // 자필 서명 입력 시각(있으면 동의서에 서명 합성됨)
   created_at: string;
   updated_at: string;
 }

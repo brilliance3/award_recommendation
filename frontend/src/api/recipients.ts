@@ -30,6 +30,12 @@ export const generateMerit = (id: string, payload: { keywords: string[]; activit
 export const generatePdf = (id: string) =>
   api.post<GenerateDocumentResponse>(`/api/recipients/${id}/generate-pdf`).then(r => r.data);
 
+/** 개인정보 동의서 PDF 생성 — 성명·날짜·동의 체크 + 자필 서명 합성 */
+export const generateConsentPdf = (id: string) =>
+  api
+    .post<GenerateDocumentResponse>(`/api/recipients/${id}/generate-consent-pdf`)
+    .then(r => r.data);
+
 export const addCareer = (id: string, payload: Partial<CareerRecord>) =>
   api.post<CareerRecord>(`/api/recipients/${id}/career-records`, payload).then(r => r.data);
 

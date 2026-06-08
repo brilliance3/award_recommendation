@@ -46,6 +46,14 @@ class Recipient(Base):
     consent_version = Column(String(20))
     consent_path = Column(String(30))  # self_apply | self_add | org_apply | manage_add
 
+    # 표창 취소·회수 동의 로깅 (허위 작성·답변 시 표창 취소·회수 — 조례 제17조 근거)
+    revocation_consent_at = Column(DateTime)
+    revocation_consent_version = Column(String(20))
+
+    # 대상자 자필 서명 — 동의서에 합성. PNG 파일을 storage/signatures/ 에 보관하고 경로만 기록.
+    signature_path = Column(String(500))
+    signed_at = Column(DateTime)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

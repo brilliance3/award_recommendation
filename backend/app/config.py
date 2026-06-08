@@ -10,9 +10,11 @@ GENERATED_DIR = STORAGE_DIR / "generated"
 UPLOAD_DIR = STORAGE_DIR / "uploads"
 # 도장 이미지 — 담당자가 업로드/교체 가능하므로 정적(frontend) 대신 런타임 저장소에 보관
 SEAL_DIR = STORAGE_DIR / "seals"
+# 대상자 서명 이미지 — 동의서에 합성. 도장과 동일하게 런타임 저장소(Fly 볼륨)에 보관.
+SIGNATURE_DIR = STORAGE_DIR / "signatures"
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 
-for d in (STORAGE_DIR, GENERATED_DIR, UPLOAD_DIR, SEAL_DIR):
+for d in (STORAGE_DIR, GENERATED_DIR, UPLOAD_DIR, SEAL_DIR, SIGNATURE_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 # DB URL - SQLite(로컬) 또는 Postgres(운영)

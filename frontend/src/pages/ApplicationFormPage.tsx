@@ -10,6 +10,7 @@ import { MERIT_CATEGORIES } from "../data/meritCategories";
 import { CHECKLIST_ITEMS } from "../data/checklistItems";
 import Field, { Button, Input, TextArea } from "../components/Field";
 import DateInput from "../components/DateInput";
+import SignaturePad from "../components/SignaturePad";
 import AwardSheetPreview from "../components/AwardSheetPreview";
 import PublicLayout from "../components/PublicLayout";
 
@@ -71,6 +72,9 @@ export interface RecipientFormData {
   // 개인정보 동의(필수) — 작성 전 체크 (수집·이용 / 제3자 제공·활용)
   consent_collect: boolean;
   consent_provide: boolean;
+  // 표창 취소·회수 동의(필수, 조례 제17조) + 자필 서명(PNG data URL)
+  consent_revocation: boolean;
+  signature: string;
 }
 
 export function emptyRecipient(): RecipientFormData {
@@ -104,6 +108,8 @@ export function emptyRecipient(): RecipientFormData {
     previous_awards: [{ award_date: "", description: "" }],
     consent_collect: false,
     consent_provide: false,
+    consent_revocation: false,
+    signature: "",
   };
 }
 
@@ -145,6 +151,10 @@ export function validateRecipient(r: RecipientFormData): string | null {
     return "체크리스트 본인 확인 생년월일이 기본정보와 일치하지 않습니다.";
   if (!r.consent_collect || !r.consent_provide)
     return "개인정보 수집·이용 및 제3자 제공·활용 동의(필수)에 모두 체크해 주세요.";
+  if (!r.consent_revocation)
+    return "허위 작성 시 표창 취소·회수 동의(필수, 조례 제17조)에 체크해 주세요.";
+  if (!r.signature)
+    return "본인 자필 서명을 입력해 주세요.";
   return null;
 }
 
@@ -206,6 +216,8 @@ export function toApplicationRecipient(r: RecipientFormData): ApplicationRecipie
       }))
       .filter(p => p.award_date || p.description),
     consent: !!(r.consent_collect && r.consent_provide),
+    revocation_consent: !!r.consent_revocation,
+    signature: r.signature || undefined,
   };
 }
 
@@ -923,6 +935,20 @@ function ConsentBox({
         />
         <span><span className="text-danger-600">[필수]</span> 제3자 제공·활용 동의</span>
       </label>
+      <div className="rounded border border-danger-200 bg-danger-50/60 p-2 text-xs text-ink-700 leading-relaxed">
+        본인은 공적조서 등 제출 서류를 <strong>허위로 작성하거나 허위로 답변</strong>한 사실이 확인될 경우,
+        수여된 표창이 <strong>취소되며 표창장(부상 포함)이 회수될 수 있음</strong>에 동의합니다.
+        <span className="text-ink-500">(근거: 「경기도의회 표창 등에 관한 조례」 제17조 표창취소)</span>
+      </div>
+      <label className="flex items-start gap-2 cursor-pointer text-sm text-ink-800">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={data.consent_revocation}
+          onChange={e => onChange({ consent_revocation: e.target.checked })}
+        />
+        <span><span className="text-danger-600">[필수]</span> 허위 작성·답변 시 표창 취소 및 회수에 동의합니다.</span>
+      </label>
     </div>
   );
 }
@@ -949,6 +975,8 @@ export function RecipientCard({
     if (s === 0) {
       if (!data.consent_collect || !data.consent_provide)
         return "개인정보 수집·이용 및 제3자 제공·활용 동의(필수)에 모두 체크해 주세요.";
+      if (!data.consent_revocation)
+        return "허위 작성 시 표창 취소·회수 동의(필수, 조례 제17조)에 체크해 주세요.";
       const m: string[] = [];
       if (!data.recipient_name.trim()) m.push("성명");
       if (!data.birth_date) m.push("생년월일");
@@ -1492,6 +1520,34 @@ export function RecipientCard({
               value={data.cl_confirm_birth}
               onChange={v => onChange({ cl_confirm_birth: v })}
               placeholder="생년월일 (숫자만)"
+            />
+          </div>
+        </div>
+
+        {/* 표창 취소·회수 확약(중복 노출) + 자필 서명 */}
+        <div className="rounded-lg border-2 border-danger-300 bg-danger-50/50 p-3 space-y-2">
+          <p className="text-xs font-bold text-danger-700">표창 취소·회수 확약 및 자필 서명 (필수)</p>
+          <p className="text-xs text-ink-700 leading-relaxed">
+            본인은 위 자가 부적격 체크리스트와 제출 공적조서의 내용이 사실임을 확인하며,
+            <strong> 허위로 작성·답변한 사실이 확인될 경우 수여된 표창이 취소되고 표창장(부상 포함)이 회수될 수 있음</strong>에 동의합니다.
+            <span className="text-ink-500"> (근거: 「경기도의회 표창 등에 관한 조례」 제17조 표창취소)</span>
+          </p>
+          <label className="flex items-start gap-2 cursor-pointer text-sm text-ink-800">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={data.consent_revocation}
+              onChange={e => onChange({ consent_revocation: e.target.checked })}
+            />
+            <span><span className="text-danger-600">[필수]</span> 위 내용을 확인하였으며 표창 취소·회수에 동의합니다.</span>
+          </label>
+          <div>
+            <p className="text-xs font-semibold text-ink-700 mb-1">
+              대상자 자필 서명 <span className="text-danger-600">(필수)</span>
+            </p>
+            <SignaturePad
+              value={data.signature}
+              onChange={v => onChange({ signature: v })}
             />
           </div>
         </div>
