@@ -137,6 +137,20 @@ def generate_consent_pdf(recipient: Recipient, when: datetime | None = None) -> 
     if out_pdf.exists() and meta.exists() and meta.read_text(encoding="utf-8").strip() == key:
         return out_pdf
 
+    # 1순위: 상시 워밍된 브라우저 풀(빠름). 실패하면 기존 launch-per-call로 폴백.
+    if PDF_ENGINE.lower() == "playwright":
+        try:
+            from . import browser_pool
+
+            if browser_pool.render_pdf(html, out_pdf):
+                try:
+                    meta.write_text(key, encoding="utf-8")
+                except Exception:
+                    pass
+                return out_pdf
+        except Exception:
+            pass
+
     preferred = PDF_ENGINE.lower()
     order = ["playwright", "weasyprint"] if preferred == "playwright" else ["weasyprint", "playwright"]
     errors = []

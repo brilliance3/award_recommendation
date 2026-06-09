@@ -13,58 +13,65 @@
     /* 단어 단위 줄바꿈 — 단어 중간에서 끊지 않음 */
     word-break: keep-all;
     overflow-wrap: break-word;
-    line-height: 1.32;
+    line-height: 1.45;
   }
+  /* A4 한 페이지를 위·아래로 꽉 채우는 플렉스 컬럼 */
   .page {
     width: 210mm; height: 297mm;
-    padding: 13mm 15mm;
+    padding: 16mm 17mm;
+    display: flex; flex-direction: column;
   }
   h1 {
     text-align: center; font-family: "경기천년제목", "경기천년바탕", sans-serif;
-    font-size: 18pt; margin: 0 0 8px; letter-spacing: -0.3px;
+    font-size: 20pt; margin: 0 0 14px; letter-spacing: -0.3px;
   }
-  .intro { font-size: 9.2pt; margin: 0 0 10px; }
-  .sec-title { font-size: 10.5pt; font-weight: bold; margin: 8px 0 4px; }
-  table.items { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  .intro { font-size: 10pt; margin: 0 0 16px; line-height: 1.5; }
+  .sec-title { font-size: 11.5pt; font-weight: bold; margin: 10px 0 5px; }
+  table.items { width: 100%; border-collapse: collapse; font-size: 9.6pt; }
   table.items td {
-    border: 0.7px solid #444; padding: 3px 6px; vertical-align: top;
+    border: 0.7px solid #444; padding: 5px 8px; vertical-align: top; line-height: 1.4;
   }
   table.items td.label {
-    width: 32%; background: #f3f3f3; font-weight: bold; white-space: normal;
+    width: 31%; background: #f3f3f3; font-weight: bold; white-space: normal;
   }
   .agree-row {
-    display: flex; align-items: center; gap: 26px;
-    font-size: 9.5pt; font-weight: bold; margin: 5px 2px 2px;
+    display: flex; align-items: center; gap: 30px;
+    font-size: 10pt; font-weight: bold; margin: 7px 2px 4px;
   }
-  .agree-row .req { color: #000; margin-right: 6px; }
+  .agree-row .req { margin-right: 6px; }
   /* CSS로 그린 체크박스 — 폰트 글리프 의존 제거(동의함만 정확히 체크) */
   .box {
-    display: inline-block; width: 11px; height: 11px;
-    border: 1.3px solid #000; position: relative; vertical-align: -1px; margin-right: 5px;
+    display: inline-block; width: 12px; height: 12px;
+    border: 1.4px solid #000; position: relative; vertical-align: -1px; margin-right: 6px;
   }
   .box.on::after {
-    content: ""; position: absolute; left: 3px; top: -0.5px;
-    width: 4px; height: 8px; border: solid #000; border-width: 0 1.7px 1.7px 0;
+    content: ""; position: absolute; left: 3.5px; top: -0.5px;
+    width: 4px; height: 9px; border: solid #000; border-width: 0 1.8px 1.8px 0;
     transform: rotate(45deg);
   }
-  .declaration { font-size: 10pt; text-align: center; margin: 14px 0 6px; font-weight: bold; }
-  .date { text-align: center; font-size: 10.5pt; letter-spacing: 2px; margin: 8px 0 16px; }
-  .sign-line {
-    font-size: 10pt; margin: 9px 0; display: flex; align-items: flex-end; gap: 6px;
+  /* 선언 + 날짜 + 서명부: 본문 아래 여백을 흡수해 페이지 하단까지 꽉 차게 */
+  .closing { margin-top: auto; padding-top: 18px; }
+  .declaration { font-size: 11pt; text-align: center; margin: 0 0 14px; font-weight: bold; }
+  .date { text-align: center; font-size: 12pt; letter-spacing: 3px; margin: 0 0 26px; }
+  /* 서명부 — 가운데 정렬된 좁은 블록(길게 한 줄로 늘어지지 않게) */
+  .signs { width: 78%; margin: 0 auto; }
+  .srow {
+    display: flex; align-items: flex-end; gap: 8px; font-size: 10.5pt; margin: 14px 0;
   }
-  .sign-line .who { white-space: nowrap; }
-  .fill {
-    flex: 1; border-bottom: 0.8px solid #000; min-height: 16px; position: relative;
+  .srow .who { white-space: nowrap; }
+  .srow .fill {
+    flex: 1; border-bottom: 0.9px solid #000; min-height: 18px; text-align: center; padding-bottom: 1px;
   }
   /* 서명 슬롯 — '(서명 또는 인)' 위에 서명 이미지가 겹쳐 올라간다 */
-  .sigslot { position: relative; display: inline-block; white-space: nowrap; padding: 0 4px; }
-  .sigslot .hint { color: #444; }
+  .sigslot { position: relative; display: inline-block; white-space: nowrap; padding: 0 2px; }
+  .sigslot .hint { color: #555; font-size: 9.5pt; }
   .sigslot img.sig {
     position: absolute; left: 50%; top: 50%;
-    transform: translate(-50%, -54%);
-    height: 40px; width: auto; pointer-events: none;
+    transform: translate(-50%, -56%);
+    height: 46px; width: auto; pointer-events: none;
   }
-  .to { text-align: right; font-size: 10.5pt; font-weight: bold; margin-top: 16px; }
+  .agent-note { text-align: center; color: #555; font-size: 9pt; margin-top: 4px; }
+  .to { text-align: center; font-size: 12pt; font-weight: bold; margin-top: 30px; letter-spacing: 1px; }
 </style>
 </head>
 <body>
@@ -102,31 +109,34 @@
     <span><span class="box"></span>동의하지 않음</span>
   </div>
 
-  <div class="declaration">본인은 상기 내용과 같이 개인정보를 수집·이용 및 제공하는 데 동의합니다.</div>
-  <div class="date">{{ year }}년　　{{ month }}월　　{{ day }}일</div>
+  <div class="closing">
+    <div class="declaration">본인은 상기 내용과 같이 개인정보를 수집·이용 및 제공하는 데 동의합니다.</div>
+    <div class="date">{{ year }}년　　{{ month }}월　　{{ day }}일</div>
 
-  <div class="sign-line">
-    <span class="who">대상자 성명 :</span>
-    <span class="fill">&nbsp;{{ name }}</span>
-    <span class="sigslot">
-      <span class="hint">(서명 또는 인)</span>
-      {% if signature %}<img class="sig" src="{{ signature }}" />{% endif %}
-    </span>
-  </div>
-  <div class="sign-line">
-    <span class="who">법정대리인(만14세 미만 시) :</span>
-    <span class="fill"></span>
-    <span class="sigslot"><span class="hint">(서명 또는 인)</span></span>
-  </div>
-  <div class="sign-line" style="font-size:9pt">
-    <span class="who">(대리 작성 시) — 기관명 :</span>
-    <span class="fill"></span>
-    <span class="who">담당자 :</span>
-    <span class="fill"></span>
-    <span class="who" style="color:#444">(대상자에게 고지·동의받았음을 확약)</span>
-  </div>
+    <div class="signs">
+      <div class="srow">
+        <span class="who">대상자 성명</span>
+        <span class="fill">{{ name }}</span>
+        <span class="sigslot">
+          <span class="hint">(서명 또는 인)</span>
+          {% if signature %}<img class="sig" src="{{ signature }}" />{% endif %}
+        </span>
+      </div>
+      <div class="srow">
+        <span class="who">법정대리인</span>
+        <span class="fill"></span>
+        <span class="sigslot"><span class="hint">(서명 또는 인)</span></span>
+      </div>
+      <div class="srow">
+        <span class="who">대리작성 기관·담당자</span>
+        <span class="fill"></span>
+        <span class="sigslot"><span class="hint">(서명 또는 인)</span></span>
+      </div>
+      <div class="agent-note">※ 대리 작성 시 대상자(또는 법정대리인)에게 고지·동의받았음을 확약합니다.</div>
+    </div>
 
-  <div class="to">경기도의회({{ dept }}) 귀하</div>
+    <div class="to">경기도의회({{ dept }}) 귀하</div>
+  </div>
 </div>
 </body>
 </html>
