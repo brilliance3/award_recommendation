@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import base64
+import functools
+import hashlib
 import io
 from datetime import datetime
 from pathlib import Path
@@ -22,7 +24,6 @@ from ..config import GENERATED_DIR, PDF_ENGINE, TEMPLATE_DIR
 from ..models import Recipient
 from .pdf_generator import (
     PDFEngineUnavailable,
-    _preview_font_face_css,
     _render_with_playwright,
     _render_with_weasyprint,
 )
@@ -31,6 +32,34 @@ _env = Environment(
     loader=FileSystemLoader(str(TEMPLATE_DIR)),
     autoescape=select_autoescape(["html", "xml"]),
 )
+
+
+@functools.lru_cache(maxsize=1)
+def _consent_font_css() -> str:
+    """동의서에 필요한 경기천년 폰트만 base64 임베드(캐시).
+
+    공통 _preview_font_face_css는 바탕체를 '경기천년바탕'/'경기천년바탕 Regular' 두 이름으로
+    중복 임베드해 22MB에 달했다(렌더 지연 원인). 동의서는 바탕 reg/bold + 제목 1종만 쓰므로
+    3개 face(~11MB)만 임베드하고 모듈 단위로 캐시한다.
+    """
+    from .pdf_preview import _FONTS_DIR
+
+    faces = [
+        ("경기천년바탕", "normal", "경기천년바탕OTF_Regular.otf"),
+        ("경기천년바탕", "bold", "경기천년바탕OTF_Bold.otf"),
+        ("경기천년제목", "normal", "경기천년제목OTF_Medium.otf"),
+    ]
+    css = []
+    for family, weight, fname in faces:
+        fp = _FONTS_DIR / fname
+        if not fp.exists():
+            continue
+        b64 = base64.b64encode(fp.read_bytes()).decode()
+        css.append(
+            f"@font-face{{font-family:'{family}';font-weight:{weight};"
+            f"src:url(data:font/otf;base64,{b64}) format('opentype');}}"
+        )
+    return "".join(css)
 
 
 def _signature_path(recipient: Recipient) -> Path | None:
@@ -89,14 +118,24 @@ def render_consent_html(recipient: Recipient, when: datetime | None = None) -> s
         month=when.month,
         day=when.day,
         signature=signature,
-        font_css=_preview_font_face_css(),
+        font_css=_consent_font_css(),
     )
 
 
 def generate_consent_pdf(recipient: Recipient, when: datetime | None = None) -> Path:
-    """동의서 PDF 생성(HTML→PDF). 경로 반환."""
+    """동의서 PDF 생성(HTML→PDF). 경로 반환.
+
+    동일 입력(성명·날짜·서명)이면 캐시된 PDF를 즉시 반환해 '동의서 확인' 반복 클릭이
+    빠르게 동작하게 한다(크로미움 재실행·폰트 파싱 생략).
+    """
     html = render_consent_html(recipient, when)
     out_pdf = GENERATED_DIR / f"개인정보동의서_{recipient.id}.pdf"
+
+    # 캐시 — HTML(서명·데이터 포함) 해시가 같으면 재생성 생략
+    key = hashlib.sha256(html.encode("utf-8")).hexdigest()
+    meta = out_pdf.with_suffix(".pdf.key")
+    if out_pdf.exists() and meta.exists() and meta.read_text(encoding="utf-8").strip() == key:
+        return out_pdf
 
     preferred = PDF_ENGINE.lower()
     order = ["playwright", "weasyprint"] if preferred == "playwright" else ["weasyprint", "playwright"]
@@ -107,6 +146,10 @@ def generate_consent_pdf(recipient: Recipient, when: datetime | None = None) -> 
                 _render_with_playwright(html, out_pdf)
             else:
                 _render_with_weasyprint(html, out_pdf)
+            try:
+                meta.write_text(key, encoding="utf-8")
+            except Exception:
+                pass
             return out_pdf
         except PDFEngineUnavailable as e:
             errors.append(f"{engine}: {e}")
