@@ -82,6 +82,7 @@ def create_app() -> FastAPI:
     # 로그인 없이 접근 가능한 경로 (로그인 화면 렌더·인증 처리에 필요)
     _PUBLIC_PATHS = {
         "/api/health",
+        "/api/health/pdf-bench",
         "/api/auth/login",
         "/api/auth/logout",
         "/api/auth/me",
@@ -125,6 +126,13 @@ def create_app() -> FastAPI:
     def _startup() -> None:
         init_db()
         auth.load_from_db()
+        # PDF 브라우저 풀을 백그라운드로 미리 워밍(첫 동의서 생성이 콜드가 되지 않게).
+        # 시작을 막지 않도록 별도 스레드에서.
+        import threading
+
+        from .services import browser_pool
+
+        threading.Thread(target=browser_pool.prewarm, daemon=True, name="pdf-prewarm").start()
 
     @app.exception_handler(Exception)
     async def _all_exception_handler(request: Request, exc: Exception):
@@ -144,6 +152,28 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     def health() -> dict:
         return {"status": "ok"}
+
+    @app.get("/api/health/pdf-bench")
+    def pdf_bench() -> dict:
+        """동의서 렌더 시간 실측(PII 없는 더미). 콜드/웜 진단용. 공개."""
+        import time
+        from types import SimpleNamespace
+
+        from .services import consent_generator
+
+        rec = SimpleNamespace(
+            id="_bench", recipient_name="홍길동", signed_at=None, signature_path=None,
+            award_case=None,
+        )
+        times = []
+        for _ in range(2):
+            t = time.time()
+            try:
+                consent_generator.generate_consent_pdf(rec)
+            except Exception as e:
+                return {"error": f"{type(e).__name__}: {e}"}
+            times.append(round((time.time() - t) * 1000))
+        return {"first_ms": times[0], "second_ms": times[1]}
 
     app.include_router(award_cases.router)
     app.include_router(recipients.router)

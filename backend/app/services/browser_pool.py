@@ -66,6 +66,25 @@ def _worker_loop() -> None:
             done.set()
 
 
+def prewarm() -> None:
+    """워커 스레드(브라우저)를 미리 띄운다. 앱 시작 시 호출하면 첫 사용자 요청이 콜드가 아님."""
+    global _worker
+    if _worker_failed:
+        return
+    with _start_lock:
+        if _worker is None:
+            _worker = threading.Thread(target=_worker_loop, daemon=True, name="pdf-browser-pool")
+            _worker.start()
+    # 실제 1회 렌더까지 해 두면 폰트·엔진 초기화도 워밍된다(결과는 버림)
+    try:
+        import tempfile
+
+        tmp = Path(tempfile.gettempdir()) / "_pdfpool_warmup.pdf"
+        render_pdf("<html><body>warmup</body></html>", tmp, timeout=60.0)
+    except Exception:
+        pass
+
+
 def render_pdf(html: str, out_path: Path, timeout: float = 40.0) -> bool:
     """워밍된 브라우저로 렌더. 성공 True. 풀 미가용이면 RuntimeError(호출부가 폴백)."""
     global _worker
