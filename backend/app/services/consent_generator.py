@@ -36,11 +36,12 @@ _env = Environment(
 
 @functools.lru_cache(maxsize=1)
 def _consent_font_css() -> str:
-    """동의서에 필요한 경기천년 폰트만 base64 임베드(캐시).
+    """동의서 경기천년 폰트를 file:// URL로 참조(base64 인라인 금지).
 
-    공통 _preview_font_face_css는 바탕체를 '경기천년바탕'/'경기천년바탕 Regular' 두 이름으로
-    중복 임베드해 22MB에 달했다(렌더 지연 원인). 동의서는 바탕 reg/bold + 제목 1종만 쓰므로
-    3개 face(~11MB)만 임베드하고 모듈 단위로 캐시한다.
+    예전엔 OTF를 base64로 HTML에 인라인(11~22MB)해, 상시 워밍된 브라우저도 매 렌더마다
+    그 11MB를 다시 파싱하느라 렌더가 ~1.5s였다(병목). file:// URL로 참조하면 브라우저가
+    폰트를 1회만 로드·캐시 → 이후 렌더는 ~0.05s. HTML 용량도 작아지고 출력 PDF엔 사용
+    글자만 서브셋 임베드돼 파일도 가벼워진다. (브라우저 launch에 --allow-file-access-from-files 필요)
     """
     from .pdf_preview import _FONTS_DIR
 
@@ -54,10 +55,9 @@ def _consent_font_css() -> str:
         fp = _FONTS_DIR / fname
         if not fp.exists():
             continue
-        b64 = base64.b64encode(fp.read_bytes()).decode()
         css.append(
             f"@font-face{{font-family:'{family}';font-weight:{weight};"
-            f"src:url(data:font/otf;base64,{b64}) format('opentype');}}"
+            f"src:url('file://{fp.as_posix()}') format('opentype');}}"
         )
     return "".join(css)
 

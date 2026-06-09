@@ -24,7 +24,7 @@ def _worker_loop() -> None:
         from playwright.sync_api import sync_playwright
 
         pw = sync_playwright().start()
-        browser = pw.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage"])
+        browser = pw.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage", "--allow-file-access-from-files"])
     except Exception:
         _worker_failed = True
         # 큐에 쌓인 요청을 모두 실패 처리
@@ -54,7 +54,7 @@ def _worker_loop() -> None:
             try:
                 # 브라우저 재기동 시도(다음 요청을 위해)
                 if not browser.is_connected():
-                    browser = pw.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage"])
+                    browser = pw.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage", "--allow-file-access-from-files"])
             except Exception:
                 _worker_failed = True
         finally:
