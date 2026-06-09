@@ -154,26 +154,37 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     @app.get("/api/health/pdf-bench")
-    def pdf_bench() -> dict:
-        """동의서 렌더 시간 실측(PII 없는 더미). 콜드/웜 진단용. 공개."""
+    def pdf_bench(n: int = 0, sig: int = 1) -> dict:
+        """동의서 렌더 시간 실측(PII 없는 더미). 매 호출 고유 이름으로 캐시 우회. 공개.
+
+        n: 이름에 섞을 값(캐시 미스 강제). sig=1이면 더미 서명 포함(실제와 유사).
+        """
+        import io
         import time
         from types import SimpleNamespace
 
+        from PIL import Image, ImageDraw
+
+        from .config import SIGNATURE_DIR
         from .services import consent_generator
 
+        rid = f"_bench{n}"
+        sig_path = None
+        if sig:
+            img = Image.new("RGBA", (400, 150), (0, 0, 0, 0))
+            ImageDraw.Draw(img).line([(20, 120), (390, 40)], fill=(0, 0, 0, 200), width=4)
+            sig_path = SIGNATURE_DIR / f"{rid}.png"
+            img.save(sig_path)
         rec = SimpleNamespace(
-            id="_bench", recipient_name="홍길동", signed_at=None, signature_path=None,
-            award_case=None,
+            id=rid, recipient_name=f"홍길동{n}", signed_at=None,
+            signature_path=str(sig_path) if sig_path else None, award_case=None,
         )
-        times = []
-        for _ in range(2):
-            t = time.time()
-            try:
-                consent_generator.generate_consent_pdf(rec)
-            except Exception as e:
-                return {"error": f"{type(e).__name__}: {e}"}
-            times.append(round((time.time() - t) * 1000))
-        return {"first_ms": times[0], "second_ms": times[1]}
+        t = time.time()
+        try:
+            consent_generator.generate_consent_pdf(rec)
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+        return {"render_ms": round((time.time() - t) * 1000), "with_signature": bool(sig)}
 
     app.include_router(award_cases.router)
     app.include_router(recipients.router)
