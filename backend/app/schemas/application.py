@@ -49,11 +49,13 @@ class ApplicationRecipient(BaseModel):
 
     checklist: ChecklistSubmit  # 대상자 본인 자가 체크
     merit_content: ApplicationMeritContent
-    careers: List[ApplicationCareerRecord] = Field(default_factory=list)
-    previous_awards: List[ApplicationPreviousAward] = Field(default_factory=list)
+    careers: List[ApplicationCareerRecord] = Field(default_factory=list, max_length=50)
+    previous_awards: List[ApplicationPreviousAward] = Field(default_factory=list, max_length=50)
     consent: bool = False  # 개인정보 수집·이용 및 제공 활용 동의(필수)
     revocation_consent: bool = False  # 표창 취소·회수 동의(필수, 조례 제17조)
-    signature: Optional[str] = None  # 자필 서명 PNG data URL (data:image/png;base64,...)
+    # 자필 서명 PNG data URL (data:image/png;base64,...). 서명 패드 그림은 보통 수십 KB이므로
+    # 약 2MB(base64 문자열 길이)로 상한 — 과대 페이로드로 인한 메모리·디스크 고갈(DoS) 차단.
+    signature: Optional[str] = Field(default=None, max_length=2_000_000)
 
 
 class ApplicationSubmit(BaseModel):
@@ -75,7 +77,8 @@ class ApplicationSubmit(BaseModel):
 
     # 대상자 — 개인 신청은 본인 1명 이상, 기관 대표 신청은 0명 허용(공유 URL로 자가추가).
     # 역할별 최소개수는 핸들러(submit_application)에서 검증한다.
-    recipients: List[ApplicationRecipient] = Field(default_factory=list)
+    # 과대 단일 요청 방지 — 한 번 제출에 최대 100명까지만 허용.
+    recipients: List[ApplicationRecipient] = Field(default_factory=list, max_length=100)
 
 
 class ApplicationSubmitResponse(BaseModel):

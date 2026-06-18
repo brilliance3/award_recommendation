@@ -28,6 +28,9 @@ elif DATABASE_URL.startswith("postgresql://") and "+psycopg" not in DATABASE_URL
 # LLM (선택) - 환경변수가 있을 때만 호출
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+# Gemini API (Google AI Studio 발급 키). 설정 시 AI 자동작성에서 1순위로 사용.
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 # PDF 엔진 선택: "playwright" 또는 "weasyprint" (운영기본=playwright)
 PDF_ENGINE = os.getenv("PDF_ENGINE", "playwright")

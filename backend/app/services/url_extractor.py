@@ -8,9 +8,12 @@
 """
 from __future__ import annotations
 
+import ipaddress
 import logging
 import re
+import socket
 from typing import List, Optional, Tuple
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -18,6 +21,37 @@ from bs4 import BeautifulSoup
 from ..schemas.documents import URLExtractResponse
 
 logger = logging.getLogger("award.url_extractor")
+
+# 외부 URL 조회 시 응답 본문 상한(바이트) — 과대 페이지 파싱으로 인한 자원 고갈 방지.
+_MAX_RESPONSE_BYTES = 5_000_000
+
+
+def _resolves_to_public_ip(url: str) -> bool:
+    """URL 호스트가 공인(global) IP로만 해석되는지 검사(SSRF 방어).
+
+    내부망·로컬호스트·사설/링크로컬/예약/CGNAT IP로 향하는 요청을 차단해, 서버가
+    클라우드 메타데이터·내부 서비스에 접근하도록 유도당하는 것을 막는다.
+    모든 해석된 IP가 is_global이어야만 통과(하나라도 비global이면 차단).
+    """
+    host = urlparse(url).hostname
+    if not host:
+        return False
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return False
+    if not infos:
+        return False
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            return False
+        # is_global 기반 차단 — CGNAT(100.64.0.0/10) 포함 비공인 주소 전부 차단.
+        # loopback/unspecified도 is_global=False 이므로 함께 차단된다.
+        if not ip.is_global:
+            return False
+    return True
 
 
 # ── 직위 키워드 (긴 것 먼저 매칭 — '부회장' 이 '회장'보다 우선되도록 정렬) ──
@@ -195,20 +229,82 @@ def extract_from_url(url: str) -> URLExtractResponse:
             status_message="http:// 또는 https:// 로 시작하는 URL을 입력해 주세요.",
         )
 
+    # SSRF 방어 — 내부망·사설 IP·로컬호스트 등으로 향하는 요청은 차단한다.
+    if not _resolves_to_public_ip(url):
+        return URLExtractResponse(
+            status="fetch_failed",
+            status_message="조회할 수 없는 주소입니다(내부망·사설 IP 등은 허용되지 않습니다).",
+        )
+
+    # 수동 리다이렉트 루프 — 매 hop마다 목적지 URL을 재검증해 302→내부IP 우회를 차단한다.
+    _MAX_HOPS = 6  # 최초 요청 1 + 리다이렉트 최대 5
     try:
         with httpx.Client(
             timeout=12.0,
-            follow_redirects=True,
+            follow_redirects=False,  # 수동으로 처리
             headers=_DEFAULT_HEADERS,
         ) as client:
-            resp = client.get(url)
-        if resp.status_code >= 400:
+            current_url = url
+            final_resp_status: int = 0
+            final_resp_headers: dict = {}
+            raw_bytes = b""
+            redirected = False
+
+            for _hop in range(_MAX_HOPS):
+                # hop마다 목적지 재검증(리다이렉트 후 내부IP로 향하는 것 차단)
+                if not _resolves_to_public_ip(current_url):
+                    return URLExtractResponse(
+                        status="fetch_failed",
+                        status_message="조회할 수 없는 주소입니다(내부망·사설 IP 등은 허용되지 않습니다).",
+                    )
+                # 단일 stream으로 리다이렉트 판별과 본문 읽기를 통합.
+                # Location 헤더가 있는 3xx만 리다이렉트로 처리(304 등 Location 없는 3xx는 최종 취급).
+                # 리다이렉트면 본문을 읽지 않고 다음 hop으로, 최종이면 5MB 제한 스트리밍으로 읽는다.
+                with client.stream("GET", current_url) as resp:
+                    if resp.has_redirect_location:
+                        # 상대 경로는 절대 경로로 변환
+                        current_url = urljoin(current_url, resp.headers.get("location", ""))
+                        redirected = True
+                        continue  # with 블록 종료 시 stream 자동 close, 본문 미수신
+                    # 최종(비3xx 또는 Location 없는 3xx) 응답 — 스트리밍으로 읽으며 5MB 초과 시 즉시 중단
+                    final_resp_status = resp.status_code
+                    final_resp_headers = dict(resp.headers)
+                    for chunk in resp.iter_bytes():
+                        raw_bytes += chunk
+                        if len(raw_bytes) > _MAX_RESPONSE_BYTES:
+                            return URLExtractResponse(
+                                status="fetch_failed",
+                                status_message="페이지 용량이 너무 큽니다. 주요 정보를 수동으로 입력해 주세요.",
+                            )
+                redirected = False
+                break
+            else:
+                # 6회 초과
+                return URLExtractResponse(
+                    status="fetch_failed",
+                    status_message="리다이렉트가 너무 많습니다 (최대 5회). 직접 URL을 확인해 주세요.",
+                )
+
+        if redirected:
             return URLExtractResponse(
                 status="fetch_failed",
-                status_message=f"페이지를 불러오지 못했습니다 (HTTP {resp.status_code}). "
+                status_message="페이지를 불러오지 못했습니다.",
+            )
+        if final_resp_status >= 400:
+            return URLExtractResponse(
+                status="fetch_failed",
+                status_message=f"페이지를 불러오지 못했습니다 (HTTP {final_resp_status}). "
                 f"접근 권한이 필요한 페이지이거나 차단되었을 수 있습니다.",
             )
-        html = resp.text
+        # 인코딩 자동 감지(Content-Type charset 우선, 없으면 UTF-8)
+        content_type = final_resp_headers.get("content-type", "")
+        charset = "utf-8"
+        if "charset=" in content_type:
+            charset = content_type.split("charset=")[-1].split(";")[0].strip() or "utf-8"
+        try:
+            html = raw_bytes.decode(charset, errors="replace")
+        except LookupError:
+            html = raw_bytes.decode("utf-8", errors="replace")
     except httpx.TimeoutException:
         return URLExtractResponse(
             status="fetch_failed",
@@ -224,16 +320,16 @@ def extract_from_url(url: str) -> URLExtractResponse:
         logger.exception("Unexpected URL fetch error")
         return URLExtractResponse(
             status="fetch_failed",
-            status_message=f"알 수 없는 오류: {type(e).__name__}: {e}",
+            status_message="알 수 없는 오류가 발생했습니다.",
         )
 
     try:
         text, title, og_title = _extract_text_and_title(html)
-    except Exception as e:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         logger.exception("HTML parse failed")
         return URLExtractResponse(
             status="fetch_failed",
-            status_message=f"HTML 파싱 실패: {type(e).__name__}",
+            status_message="HTML 파싱 실패. 주요 정보를 수동으로 입력해 주세요.",
         )
 
     if not text or len(text) < 30:

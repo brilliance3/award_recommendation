@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from .. import models, schemas
+from .. import models, ratelimit, schemas
 from ..database import get_db
 from .deps import get_recipient_or_404
 
@@ -48,18 +48,27 @@ def submit_checklist(
     """대상자 본인이 체크리스트 제출"""
     r = get_recipient_or_404(db, recipient_id)
 
+    # 담당자(전문위원실) 검토가 끝난 뒤에는 자가 재제출을 막는다 —
+    # 검토 완료된 내용이 본인에 의해 조용히 덮어써지는 것을 차단(409).
+    # (검토 전 재작성은 허용: 작성 도중 닫았다가 이어서 제출하는 정상 흐름 보존)
+    if r.checklist and r.checklist.admin_reviewed_at is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="이미 담당자 검토가 완료되어 재제출할 수 없습니다. 담당자에게 문의해 주세요.",
+        )
+
     # 본인 확인: 입력한 이름이 등록된 이름과 일치하는지
     if (payload.self_confirm_name or "").strip() != (r.recipient_name or "").strip():
         raise HTTPException(
             status_code=400,
             detail="입력하신 이름이 등록된 추천대상자와 일치하지 않습니다.",
         )
-    # 생년월일 확인 (있는 경우)
+    # 생년월일 확인 — 등록된 생년월일이 없으면 이름만으로 통과시키지 않는다.
+    # 본인확인 강도를 위해 입력한 생년월일을 등록 정보로 채워 신원을 고정한다.
+    entered_birth = (payload.self_confirm_birth or "").strip()
     if r.birth_date:
         try:
-            entered = datetime.strptime(
-                payload.self_confirm_birth.strip(), "%Y-%m-%d"
-            ).date()
+            entered = datetime.strptime(entered_birth, "%Y-%m-%d").date()
         except ValueError:
             raise HTTPException(
                 status_code=400,
@@ -70,6 +79,16 @@ def submit_checklist(
                 status_code=400,
                 detail="입력하신 생년월일이 등록된 정보와 일치하지 않습니다.",
             )
+    else:
+        # 등록된 생년월일이 없는 대상자: 생년월일을 필수로 받아 신원을 보강한다.
+        try:
+            entered = datetime.strptime(entered_birth, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="본인 확인을 위해 생년월일(YYYY-MM-DD)을 입력해 주세요.",
+            )
+        r.birth_date = entered
 
     # 이미 제출되었으면 덮어쓰기 (필요 시 재작성 가능)
     cl = r.checklist or models.Checklist(recipient_id=r.id)
@@ -97,8 +116,7 @@ def submit_checklist(
         setattr(cl, field, getattr(payload, field))
 
     cl.submitted_at = datetime.utcnow()
-    client_host = request.client.host if request.client else ""
-    cl.submitter_ip = (request.headers.get("x-forwarded-for") or client_host)[:64]
+    cl.submitter_ip = ratelimit.client_ip(request)
 
     if cl.recipient_id and not r.checklist:
         db.add(cl)

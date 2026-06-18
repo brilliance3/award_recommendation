@@ -91,14 +91,20 @@ def _get_or_create_setting(db: Session) -> models.AppSetting:
     return s
 
 
+_SEAL_MAX_BYTES = 5_000_000  # 도장 이미지 업로드 상한 5MB
+
+
 def _save_seal_file(upload: UploadFile, prefix: str) -> str:
     ext = Path(upload.filename or "").suffix.lower()
     if ext not in _ALLOWED_SEAL_EXT:
         raise HTTPException(status_code=400, detail="jpg/png 이미지만 업로드 가능합니다")
+    data = upload.file.read()
+    if len(data) > _SEAL_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="이미지 파일 크기가 너무 큽니다 (최대 5MB).")
     fname = f"{prefix}_{uuid.uuid4().hex[:8]}{ext}"
     dst = SEAL_DIR / fname
     with open(dst, "wb") as f:
-        f.write(upload.file.read())
+        f.write(data)
     return fname
 
 
@@ -203,11 +209,13 @@ def update_site_credentials(payload: SiteCredentialsUpdate, db: Session = Depend
         raise HTTPException(status_code=400, detail="아이디를 입력하세요")
     if len(password) < 4:
         raise HTTPException(status_code=400, detail="비밀번호는 4자 이상이어야 합니다")
+    # 평문 대신 해시로 저장(외부 의존성 없는 PBKDF2). 캐시에도 해시를 넣어 검증·세션키 파생이 일관되게 한다.
+    hashed = auth.hash_password(password)
     s = _get_or_create_setting(db)
     s.site_username = username
-    s.site_password = password
+    s.site_password = hashed
     db.commit()
-    auth.set_cache(username, password)
+    auth.set_cache(username, hashed)
     return SiteCredentialsRead(username=username, has_password=True)
 
 

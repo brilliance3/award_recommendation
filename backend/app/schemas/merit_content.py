@@ -1,6 +1,6 @@
 """공적 내용 스키마"""
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -44,3 +44,8 @@ class MeritGenerateRequest(BaseModel):
     generate_summary: bool = True
     generate_full_text: bool = True
     generate_reason: bool = True
+    # 2모드: generate=신규 생성(미작성 상태에서 초안 작성), enhance=기존 내용 기반 보강.
+    mode: Literal["generate", "enhance"] = "generate"
+    existing_full_text: Optional[str] = None
+    existing_summary: Optional[str] = None
+    existing_reason: Optional[str] = None

@@ -24,7 +24,17 @@ export const deleteRecipient = (id: string) =>
 export const upsertMerit = (id: string, payload: Partial<MeritContent>) =>
   api.put<MeritContent>(`/api/recipients/${id}/merit-content`, payload).then(r => r.data);
 
-export const generateMerit = (id: string, payload: { keywords: string[]; activity_summary?: string }) =>
+export const generateMerit = (
+  id: string,
+  payload: {
+    keywords: string[];
+    activity_summary?: string;
+    mode?: 'generate' | 'enhance';
+    existing_full_text?: string;
+    existing_summary?: string;
+    existing_reason?: string;
+  }
+) =>
   api.post<MeritContent>(`/api/recipients/${id}/generate-merit`, payload).then(r => r.data);
 
 export const generatePdf = (id: string) =>

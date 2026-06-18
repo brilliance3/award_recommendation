@@ -3,6 +3,7 @@
 기관 대표 신청은 공유 토큰(share_token)을 발급해, 외부 피추천자가 그 링크로 본인 정보를
 한 명씩 직접 추가할 수 있다(공개 GET/POST by-token)."""
 import base64
+import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta
@@ -10,7 +11,9 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from .. import models, schemas
+logger = logging.getLogger("award.applications")
+
+from .. import models, ratelimit, schemas
 from ..database import get_db
 from ..services.xlsx_generator import _extract_region_from_address
 from .deps import get_case_by_share_token_or_404, get_case_by_manage_token_or_404
@@ -59,7 +62,13 @@ def _save_signature_png(recipient_id: str, data_url: str) -> str:
     raw = data_url.strip()
     if "," in raw and raw.lower().startswith("data:"):
         raw = raw.split(",", 1)[1]
+    # 디코딩 전 길이 상한(약 2MB) — 과대 페이로드로 인한 메모리·디스크 고갈(DoS) 차단.
+    if len(raw) > 2_000_000:
+        raise ValueError("서명 이미지가 너무 큽니다")
     img_bytes = base64.b64decode(raw)
+    # 디코딩 후에도 한 번 더 확인(상한 약 1.5MB). PNG 서명은 보통 수십 KB.
+    if len(img_bytes) > 1_500_000:
+        raise ValueError("서명 이미지가 너무 큽니다")
     path = SIGNATURE_DIR / f"{recipient_id}.png"
     path.write_bytes(img_bytes)
     return str(path)
@@ -157,8 +166,8 @@ def _create_recipient_from_payload(
             recipient.signature_path = _save_signature_png(recipient.id, r_payload.signature)
             recipient.signed_at = now
         except Exception:
-            # 서명 디코딩/저장 실패는 신청 자체를 막지 않음(동의 로깅은 유지)
-            pass
+            # 서명 디코딩/저장 실패는 신청 자체를 막지 않음(동의 로깅은 유지). 단, 원인 파악용으로 로깅.
+            logger.warning("서명 저장 실패 recipient=%s", recipient.id, exc_info=True)
 
     cl_payload = r_payload.checklist
     checklist = models.Checklist(
@@ -243,6 +252,8 @@ def submit_application(
     db: Session = Depends(get_db),
 ):
     """공용 신청 — AwardCase 자동 생성, 대상자/체크리스트/공적사항도 함께 생성"""
+    # 공개 엔드포인트 오남용 완화 — IP당 1시간 60건까지 신청 허용(사무실 공용 IP 고려해 넉넉히).
+    ratelimit.enforce(request, "apply_submit", limit=60, window_sec=3600)
     # 희망 표창일 필수 (담당자가 이후 관리자 화면에서 수정 가능). 모델/DB는 nullable 유지
     # — 기존 레코드·관리자 편집 호환을 위해 제출 시점에만 강제.
     if not payload.award_date:
@@ -315,8 +326,7 @@ def submit_application(
     db.add(case)
     db.flush()
 
-    client_host = request.client.host if request.client else ""
-    submitter_ip = (request.headers.get("x-forwarded-for") or client_host)[:64]
+    submitter_ip = ratelimit.client_ip(request)
     now = datetime.utcnow()
 
     consent_path = "self_apply" if payload.applicant_role == "individual" else "org_apply"
@@ -341,8 +351,10 @@ SHARE_MAX_RECIPIENTS = 100
 
 
 @router.get("/api/applications/code/{code}")
-def resolve_share_code(code: str, db: Session = Depends(get_db)):
+def resolve_share_code(code: str, request: Request, db: Session = Depends(get_db)):
     """작성자용 짧은 코드 → 공유 토큰 변환(공개). 프론트가 /apply/add/{token} 으로 이동."""
+    # 짧은 코드 무차별 대입(enumeration) 완화 — IP당 5분 30회.
+    ratelimit.enforce(request, "share_code", limit=30, window_sec=300)
     c = (code or "").strip().upper()
     case = (
         db.query(models.AwardCase)
@@ -390,6 +402,8 @@ def add_recipient_by_token(
 
     강한 본인확인: 체크리스트 본인확인 성명·생년월일이 입력한 기본정보와 일치해야 한다.
     중복(성명+생년월일) 차단, case별 인원 상한, 제목 자동 갱신."""
+    # 공개 자가추가 오남용 완화 — IP당 5분 30회.
+    ratelimit.enforce(request, "self_add", limit=30, window_sec=300)
     case = get_case_by_share_token_or_404(db, token)
 
     # 강한 본인확인 — 체크리스트 self_confirm 이 기본정보(성명·생년월일)와 일치해야 함
@@ -419,8 +433,7 @@ def add_recipient_by_token(
             detail="이 신청에 추가 가능한 인원을 초과했습니다. 담당자에게 문의해 주세요.",
         )
 
-    client_host = request.client.host if request.client else ""
-    submitter_ip = (request.headers.get("x-forwarded-for") or client_host)[:64]
+    submitter_ip = ratelimit.client_ip(request)
     now = datetime.utcnow()
     idx = len(case.recipients) + 1
     rid = _create_recipient_from_payload(
@@ -585,8 +598,7 @@ def add_manage_recipient(
             raise HTTPException(status_code=409, detail="이미 추가된 대상자입니다(동일 성명·생년월일).")
     if len(case.recipients) >= SHARE_MAX_RECIPIENTS:
         raise HTTPException(status_code=400, detail="추가 가능한 인원을 초과했습니다.")
-    client_host = request.client.host if request.client else ""
-    submitter_ip = (request.headers.get("x-forwarded-for") or client_host)[:64]
+    submitter_ip = ratelimit.client_ip(request)
     now = datetime.utcnow()
     idx = len(case.recipients) + 1
     rid = _create_recipient_from_payload(

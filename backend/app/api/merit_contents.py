@@ -1,10 +1,11 @@
 """공적 내용 / 경력 / 과거표창 / AI 생성 API"""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
+from .. import ratelimit
 from ..database import get_db
 from ..services import merit_generator
 from .deps import get_recipient_or_404
@@ -46,19 +47,62 @@ def upsert_merit_content(
 def generate_merit(
     recipient_id: str,
     payload: schemas.MeritGenerateRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ):
+    # AI 생성 남용/비용 방지 — IP별 슬라이딩 윈도(분당 10회). 초과 시 429.
+    ratelimit.enforce(request, "generate-merit", limit=10, window_sec=60)
     r = get_recipient_or_404(db, recipient_id)
     mc = _ensure_merit_content(r, db)
 
+    # 단일테넌트: 부서별 키 없음 → 전역 GEMINI_API_KEY 폴백(gkey=None).
+    gkey = None
+
+    # 실제 제출된 경력·과거표창을 AI 프롬프트의 사실 근거로 전달
+    career_lines = [
+        f"{(c.record_date or '').strip()} {(c.description or '').strip()}".strip()
+        for c in (r.career_records or [])
+        if (c.description or "").strip()
+    ]
+    prev_award_lines = [
+        f"{(p.award_date or '').strip()} {(p.description or '').strip()}".strip()
+        for p in (r.previous_awards or [])
+        if (p.description or "").strip()
+    ]
+
+    mode = payload.mode
+
     if payload.generate_full_text:
         mc.full_merit_text = merit_generator.generate_merit_full_text(
-            r, payload.keywords, payload.activity_summary
+            r,
+            payload.keywords,
+            payload.activity_summary,
+            gemini_api_key=gkey,
+            mode=mode,
+            existing_text=payload.existing_full_text,
+            career_lines=career_lines,
+            prev_award_lines=prev_award_lines,
         )
     if payload.generate_summary:
-        mc.merit_short_summary = merit_generator.generate_merit_short_summary(r)
+        mc.merit_short_summary = merit_generator.generate_merit_short_summary(
+            r,
+            gemini_api_key=gkey,
+            mode=mode,
+            existing_text=payload.existing_summary,
+            career_lines=career_lines,
+            prev_award_lines=prev_award_lines,
+            activity_summary=payload.activity_summary,
+        )
     if payload.generate_reason:
-        mc.recommendation_reason = merit_generator.generate_recommendation_reason(r)
+        mc.recommendation_reason = merit_generator.generate_recommendation_reason(
+            r,
+            gemini_api_key=gkey,
+            mode=mode,
+            existing_text=payload.existing_reason,
+            career_lines=career_lines,
+            prev_award_lines=prev_award_lines,
+            activity_summary=payload.activity_summary,
+        )
 
     db.commit()
     db.refresh(mc)

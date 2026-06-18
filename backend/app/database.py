@@ -1,5 +1,5 @@
 """SQLAlchemy DB 세션 설정"""
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from .config import DATABASE_URL
@@ -12,6 +12,20 @@ engine = create_engine(
     echo=False,
     pool_pre_ping=True,   # 운영 Postgres에서 끊긴 커넥션 자동 재연결
 )
+
+# SQLite 동시성 강화 — FastAPI 스레드풀에서 동시 요청 시 'database is locked' 완화.
+# WAL(읽기·쓰기 동시성 향상) + busy_timeout(잠금 시 즉시 실패 대신 대기) + synchronous=NORMAL(WAL과 안전).
+if DATABASE_URL.startswith("sqlite"):
+    @event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_conn, _record):  # noqa: ANN001
+        cur = dbapi_conn.cursor()
+        try:
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA busy_timeout=5000")
+            cur.execute("PRAGMA synchronous=NORMAL")
+        finally:
+            cur.close()
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -29,7 +43,29 @@ def init_db() -> None:
     from . import models  # noqa: F401
     Base.metadata.create_all(bind=engine)
     _apply_lightweight_migrations()
+    _migrate_plaintext_site_password()
     _seed_defaults()
+
+
+def _migrate_plaintext_site_password() -> None:
+    """기존 평문 site_password 를 1회 해시로 전환(이미 해시면 skip).
+
+    해시 형식은 auth.hash_password() 의 'pbkdf2$...'. 그 접두사가 아니면 평문으로 보고
+    해시로 덮어쓴다. verify 는 평문/해시 둘 다 허용(하위호환)하므로 멱등하다."""
+    from . import models
+    from .auth import hash_password, is_hashed
+
+    db = SessionLocal()
+    try:
+        s = db.query(models.AppSetting).first()
+        if s and s.site_password and not is_hashed(s.site_password):
+            s.site_password = hash_password(s.site_password)
+            db.commit()
+    except Exception:
+        # 마이그레이션 전(컬럼 부재 등) 예외는 무시 — 다음 기동에 재시도
+        db.rollback()
+    finally:
+        db.close()
 
 
 def _seed_defaults() -> None:
@@ -85,10 +121,24 @@ def _seed_defaults() -> None:
                     pass
 
 
+def _pg_ddl(ddl: str) -> str:
+    """SQLite 전용 컬럼 타입을 Postgres 문법으로 보정.
+
+    - DATETIME → TIMESTAMP
+    - BOOLEAN DEFAULT 0/1 → BOOLEAN DEFAULT FALSE/TRUE
+    문자열/날짜 등 나머지(VARCHAR, TEXT, DATE)는 양쪽 호환이라 그대로 둔다."""
+    out = ddl.replace("DATETIME", "TIMESTAMP")
+    out = out.replace("BOOLEAN DEFAULT 0", "BOOLEAN DEFAULT FALSE")
+    out = out.replace("BOOLEAN DEFAULT 1", "BOOLEAN DEFAULT TRUE")
+    return out
+
+
 def _apply_lightweight_migrations() -> None:
-    """SQLite용 ADD COLUMN 마이그레이션 (이미 있으면 무시)."""
-    if not DATABASE_URL.startswith("sqlite"):
-        return
+    """ADD COLUMN 인플레이스 마이그레이션 (이미 있으면 무시).
+
+    SQLite: IF NOT EXISTS 미지원 → try/except 로 중복 컬럼 에러 무시.
+    Postgres: ADD COLUMN IF NOT EXISTS + 타입 보정(_pg_ddl)."""
+    is_sqlite = DATABASE_URL.startswith("sqlite")
     additions = [
         ("recipients", "rank_grade", "VARCHAR(100)"),
         ("recipients", "gender", "VARCHAR(10)"),
@@ -132,10 +182,16 @@ def _apply_lightweight_migrations() -> None:
     ]
     with engine.begin() as conn:
         for table, column, ddl in additions:
-            try:
+            if is_sqlite:
+                try:
+                    conn.exec_driver_sql(
+                        f'ALTER TABLE "{table}" ADD COLUMN "{column}" {ddl}'
+                    )
+                except Exception:
+                    # 이미 컬럼이 있으면 SQLite가 에러 발생 → 무시
+                    pass
+            else:
+                # Postgres — IF NOT EXISTS 로 중복 안전, 타입은 PG 문법으로 보정
                 conn.exec_driver_sql(
-                    f'ALTER TABLE "{table}" ADD COLUMN "{column}" {ddl}'
+                    f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "{column}" {_pg_ddl(ddl)}'
                 )
-            except Exception:
-                # 이미 컬럼이 있으면 SQLite가 에러 발생 → 무시
-                pass

@@ -56,12 +56,46 @@ def is_enabled() -> bool:
     return bool(_password)
 
 
+# ---------- 비밀번호 해시 (PBKDF2-HMAC-SHA256, stdlib) ----------
+# 저장 형식: "pbkdf2$<반복수>$<salt_hex>$<hash_hex>". 이 접두어가 없으면 레거시 평문으로 간주.
+# 외부 의존성 없이 표준 라이브러리만 사용.
+_PBKDF2_ITER = 200_000
+
+
+def hash_password(password: str) -> str:
+    """평문 비밀번호 → 솔트 적용 PBKDF2 해시 문자열."""
+    salt = secrets.token_bytes(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, _PBKDF2_ITER)
+    return f"pbkdf2${_PBKDF2_ITER}${salt.hex()}${dk.hex()}"
+
+
+def is_hashed(stored: str) -> bool:
+    return bool(stored) and stored.startswith("pbkdf2$")
+
+
+def _verify_against(stored: str, password: str) -> bool:
+    """저장값(해시 또는 레거시 평문) 대비 비밀번호 검증 — 상수시간 비교."""
+    if not stored:
+        return False
+    if is_hashed(stored):
+        try:
+            _, iter_s, salt_hex, hash_hex = stored.split("$", 3)
+            dk = hashlib.pbkdf2_hmac(
+                "sha256", password.encode("utf-8"), bytes.fromhex(salt_hex), int(iter_s)
+            )
+            return hmac.compare_digest(dk, bytes.fromhex(hash_hex))
+        except Exception:
+            return False
+    # 레거시 평문(환경변수 SITE_PASSWORD 또는 해시화 이전 DB 값) — 하위호환.
+    return secrets.compare_digest(password.encode("utf-8"), stored.encode("utf-8"))
+
+
 def verify(username: str, password: str) -> bool:
     """타이밍 공격 방지 상수시간 비교. 비밀번호 미설정 시 항상 통과."""
     if not _password:
         return True
     ok_user = secrets.compare_digest(username.encode("utf-8"), _username.encode("utf-8"))
-    ok_pw = secrets.compare_digest(password.encode("utf-8"), _password.encode("utf-8"))
+    ok_pw = _verify_against(_password, password)
     return ok_user and ok_pw
 
 
@@ -73,7 +107,7 @@ def verify_password(password: str) -> bool:
     """현재 비밀번호 일치 여부(아이디 무관). 게이트 비활성 시 항상 통과."""
     if not _password:
         return True
-    return secrets.compare_digest(password.encode("utf-8"), _password.encode("utf-8"))
+    return _verify_against(_password, password)
 
 
 # ---------- 세션 토큰 (HMAC 서명) ----------

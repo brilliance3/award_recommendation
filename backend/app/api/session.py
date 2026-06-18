@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from .. import auth
+from .. import auth, ratelimit
 
 router = APIRouter(tags=["auth"])
 
@@ -22,9 +22,13 @@ class LoginIn(BaseModel):
 
 
 @router.post("/api/auth/login")
-def login(payload: LoginIn, response: Response):
+def login(payload: LoginIn, request: Request, response: Response):
+    # 브루트포스 완화 — IP당 5분에 10회까지만 로그인 시도 허용.
+    ratelimit.enforce(request, "login", limit=10, window_sec=300)
     if not auth.verify(payload.username, payload.password):
         raise HTTPException(status_code=401, detail="아이디 또는 비밀번호가 올바르지 않습니다")
+    # 인증 성공 시 버킷 리셋 — 공용 NAT에서 정상 사용자가 잠기지 않도록.
+    ratelimit.clear("login", request)
     token = auth.make_session_token(payload.username)
     response.set_cookie(
         COOKIE_NAME,

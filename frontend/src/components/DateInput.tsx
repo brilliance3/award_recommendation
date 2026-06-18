@@ -33,6 +33,7 @@ function isoToDisplay(iso: string): string {
 }
 
 // 숫자열 d(이미 \D 제거됨)를 YYYY.MM.DD 표시형 + 완성 시 ISO 로.
+// 월(1-12)·일(1-31) 범위를 벗어나면 iso를 빈 문자열로 반환해 서버에 잘못된 날짜가 가지 않게 한다.
 function buildFromDigits(d: string): { display: string; iso: string } {
   d = d.slice(0, 8);
   const y = d.slice(0, 4);
@@ -41,10 +42,15 @@ function buildFromDigits(d: string): { display: string; iso: string } {
   let display = y;
   if (d.length > 4) display += "." + mo;
   if (d.length > 6) display += "." + da;
-  const iso =
-    y.length === 4 && mo.length === 2 && da.length === 2
-      ? `${y}-${mo}-${da}`
-      : "";
+  let iso = "";
+  if (y.length === 4 && mo.length === 2 && da.length === 2) {
+    const moNum = parseInt(mo, 10);
+    const daNum = parseInt(da, 10);
+    // 월(1-12)·일(1-31) 범위 검증 — 벗어나면 유효 ISO를 emit하지 않음
+    if (moNum >= 1 && moNum <= 12 && daNum >= 1 && daNum <= 31) {
+      iso = `${y}-${mo}-${da}`;
+    }
+  }
   return { display, iso };
 }
 

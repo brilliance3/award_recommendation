@@ -49,7 +49,29 @@ export default function MeritContentEditPage() {
     }
   };
 
-  const onGenerate = async () => {
+  const onGenerate = async (mode: "generate" | "enhance") => {
+    // 신규 생성은 작성 중인 내용을 통째로 덮어쓰므로, 미저장 내용이 있으면 확인받는다.
+    if (mode === "generate") {
+      const hasContent = !!(
+        mc.full_merit_text ||
+        mc.merit_short_summary ||
+        mc.recommendation_reason
+      );
+      if (
+        hasContent &&
+        !window.confirm(
+          "작성 중인 공적 내용이 있습니다. AI 신규 생성 결과로 덮어쓰시겠습니까? (저장 전이면 새로고침으로 복구 가능)"
+        )
+      )
+        return;
+    }
+    if (!sessionStorage.getItem("ai_pii_ack")) {
+      const ok = window.confirm(
+        "입력된 대상자 정보(성명·소속·직위 등)가 외부 AI(Gemini 등) 서버로 전송됩니다. 계속하시겠습니까?"
+      );
+      if (!ok) return;
+      sessionStorage.setItem("ai_pii_ack", "1");
+    }
     setBusy(true);
     try {
       const k = keywords
@@ -59,9 +81,26 @@ export default function MeritContentEditPage() {
       const next = await generateMerit(recipientId, {
         keywords: k,
         activity_summary: activitySummary,
+        mode,
+        ...(mode === "enhance"
+          ? {
+              existing_full_text: mc.full_merit_text || "",
+              existing_summary: mc.merit_short_summary || "",
+              existing_reason: mc.recommendation_reason || "",
+            }
+          : {}),
       });
       setMc(next);
-      alert("AI 초안이 생성되었습니다. 검토 후 저장해 주세요.");
+      alert(
+        mode === "enhance"
+          ? "기존 내용을 기반으로 보강했습니다. 검토 후 저장해 주세요."
+          : "AI 초안이 생성되었습니다. 검토 후 저장해 주세요."
+      );
+    } catch (err: any) {
+      alert(
+        "AI 생성에 실패했습니다.\n" +
+          (err?.response?.data?.detail || err?.message || "잠시 후 다시 시도해 주세요.")
+      );
     } finally {
       setBusy(false);
     }
@@ -111,14 +150,31 @@ export default function MeritContentEditPage() {
             />
           </Field>
         </div>
-        <div>
-          <Button variant="secondary" disabled={busy} onClick={onGenerate}>
-            {busy ? "생성 중..." : "AI 초안 생성 (공적요지·공적사항·추천사유)"}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            disabled={busy}
+            onClick={() => onGenerate("generate")}
+          >
+            {busy ? "처리 중..." : "AI 신규 생성"}
           </Button>
+          {mc.full_merit_text ? (
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={() => onGenerate("enhance")}
+            >
+              {busy ? "처리 중..." : "기존 내용 기반 보강"}
+            </Button>
+          ) : null}
         </div>
         <p className="text-xs text-ink-500 leading-relaxed">
-          ANTHROPIC_API_KEY 또는 OPENAI_API_KEY 가 백엔드에 설정된 경우 LLM 호출,
-          그렇지 않으면 규칙 기반 템플릿이 사용됩니다.{" "}
+          <strong className="text-ink-700">AI 신규 생성</strong>은 미작성 상태에서
+          대상자 정보·경력·과거 표창을 근거로 초안을 새로 만듭니다.{" "}
+          <strong className="text-ink-700">기존 내용 기반 보강</strong>은 이미 작성된
+          공적요지·추천사유·공적사항을 사실 왜곡 없이 행정문서 문체로 다듬고 부족분을
+          보강합니다(작성 내용이 있을 때만 노출). GEMINI_API_KEY(또는 ANTHROPIC/OPENAI)
+          가 백엔드에 설정된 경우 LLM 호출, 그렇지 않으면 규칙 기반 템플릿이 사용됩니다.{" "}
           <strong className="text-ink-700">
             모든 결과는 사람이 반드시 검토해야 합니다.
           </strong>
